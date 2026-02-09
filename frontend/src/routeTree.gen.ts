@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutNewsletterRouteImport } from './routes/_layout/newsletter'
+import { Route as LayoutNews_summaryRouteImport } from './routes/_layout/news_summary'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -27,27 +28,40 @@ const LayoutNewsletterRoute = LayoutNewsletterRouteImport.update({
   path: '/newsletter',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutNews_summaryRoute = LayoutNews_summaryRouteImport.update({
+  id: '/news_summary',
+  path: '/news_summary',
+  getParentRoute: () => LayoutRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
+  '/news_summary': typeof LayoutNews_summaryRoute
   '/newsletter': typeof LayoutNewsletterRoute
 }
 export interface FileRoutesByTo {
+  '/news_summary': typeof LayoutNews_summaryRoute
   '/newsletter': typeof LayoutNewsletterRoute
   '/': typeof LayoutIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
+  '/_layout/news_summary': typeof LayoutNews_summaryRoute
   '/_layout/newsletter': typeof LayoutNewsletterRoute
   '/_layout/': typeof LayoutIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/newsletter'
+  fullPaths: '/' | '/news_summary' | '/newsletter'
   fileRoutesByTo: FileRoutesByTo
-  to: '/newsletter' | '/'
-  id: '__root__' | '/_layout' | '/_layout/newsletter' | '/_layout/'
+  to: '/news_summary' | '/newsletter' | '/'
+  id:
+    | '__root__'
+    | '/_layout'
+    | '/_layout/news_summary'
+    | '/_layout/newsletter'
+    | '/_layout/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -77,15 +91,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutNewsletterRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/news_summary': {
+      id: '/_layout/news_summary'
+      path: '/news_summary'
+      fullPath: '/news_summary'
+      preLoaderRoute: typeof LayoutNews_summaryRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
 interface LayoutRouteChildren {
+  LayoutNews_summaryRoute: typeof LayoutNews_summaryRoute
   LayoutNewsletterRoute: typeof LayoutNewsletterRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutNews_summaryRoute: LayoutNews_summaryRoute,
   LayoutNewsletterRoute: LayoutNewsletterRoute,
   LayoutIndexRoute: LayoutIndexRoute,
 }

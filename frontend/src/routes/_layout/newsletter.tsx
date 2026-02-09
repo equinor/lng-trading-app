@@ -86,17 +86,41 @@ const REGIONS = [
   "Northeast Asia",
 ] as const
 
-type NewsCategory = "Top" | "Favourites" | "LNG" | "Macro" | "Geopolitics" | "Shipping" | "Company"
+export type NewsCategory =
+  | "Top"
+  | "Favourites"
+  | "LNG"
+  | "Macro"
+  | "Geopolitics"
+  | "Shipping"
+  | "Company"
 
-// very light categorisation from tags (until you have LLM tagging)
-function inferCategory(n: DbNewsRow): NewsCategory {
-  const t = new Set((n.tags ?? []).map((x) => x.toLowerCase()))
-  if (n.favourited) return "Favourites"
-  if (t.has("macro")) return "Macro"
-  if (t.has("geopolitics") || t.has("sanctions") || t.has("policy")) return "Geopolitics"
-  if (t.has("shipping")) return "Shipping"
-  if (t.has("company") || t.has("project") || t.has("maintenance")) return "Company"
-  return "LNG"
+const TAG_TO_CATEGORY: Record<string, NewsCategory> = {
+  top: "Top",
+  favourites: "Favourites",
+  lng: "LNG",
+  macro: "Macro",
+  geopolitics: "Geopolitics",
+  shipping: "Shipping",
+  company: "Company",
+}
+
+export function inferCategories(n: DbNewsRow): NewsCategory[] {
+  const out = new Set<NewsCategory>()
+
+  // special case: favourited => include Favourites category
+  if (n.favourited) out.add("Favourites")
+
+  for (const raw of n.tags ?? []) {
+    const tag = raw.toLowerCase().trim()
+    const cat = TAG_TO_CATEGORY[tag]
+    if (cat) out.add(cat)
+  }
+
+  // default if nothing matched
+  if (out.size === 0) out.add("LNG")
+
+  return Array.from(out)
 }
 
 function formatTime(iso: string | null) {
@@ -243,7 +267,7 @@ function Newsletter() {
   const normalized = useMemo(() => {
     return (data ?? []).map((n) => ({
       ...n,
-      category: inferCategory(n),
+      category: inferCategories(n),
       readTimeMin: readTimeMinFromContent(n.content),
     }))
   }, [data])
@@ -253,7 +277,7 @@ function Newsletter() {
     let rows = [...normalized]
 
     if (tab === "Favourites") rows = rows.filter((x) => x.favourited)
-    else if (tab !== "Top") rows = rows.filter((x) => x.category === tab)
+    else if (tab !== "Top") rows = rows.filter((x) => tab in x.category)
 
     if (sentiment !== "All") rows = rows.filter((x) => x.official_sentiment === sentiment)
 
@@ -558,10 +582,10 @@ function Newsletter() {
                 <CardContent className="pt-0">
                   <div className="flex flex-col gap-2 text-sm">
                     <RouterLink
-                      to="/items"
+                      to="/news_summary"
                       className="rounded-md border px-3 py-2 hover:bg-muted transition-colors"
                     >
-                      Items (example route)
+                      News Summary
                     </RouterLink>
 
                     <RouterLink
