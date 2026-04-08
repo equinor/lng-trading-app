@@ -17,7 +17,7 @@ if BACKEND == "databricks":
     )
 else:
     # your current in-memory mock
-    from app.services.mock_news_service import (
+    from app.services.mock.news_service import (
         get_article,
         list_news,
         update_article,

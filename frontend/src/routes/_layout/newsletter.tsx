@@ -1,75 +1,33 @@
 // frontend/src/routes/_layout/newsletter.tsx
-import { Suspense, useMemo, useState } from "react"
+// biome-ignore assist/source/organizeImports: keep grouped for readability
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link as RouterLink } from "@tanstack/react-router"
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
-import {
-  Search,
-  TrendingUp,
-  Clock,
-  Filter,
-  ExternalLink,
-  Bookmark,
-  Check,
-} from "lucide-react"
+import { Bookmark, Check, Clock, ExternalLink, Filter, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  getNews,
+  isImportantStory,
+  patchFavourite,
+  patchClassification,
+  patchSentiment,
+  type DbSentiment,
+} from "@/services/news/news_api"
 
-type DbSentiment = "Bullish" | "Bearish" | "Neutral" | null
+// ------------------------------------------------------
+// Types
+// ------------------------------------------------------
+type FavFilter = "All" | "Favourites" | "NotFavourites"
 
-type DbNewsRow = {
-  article_key: string
-  source: string
-  external_id: string | null
-  title: string
-  url: string | null
-  published_at: string | null // backend may return ISO string
-  content: string | null
-
-  favourited: boolean
-  official_sentiment: DbSentiment
-  tags: string[]
-  region: string | null
-
-  version: number
-  updated_at: string | null
-  updated_by: string | null
-}
-
-type NewsListResponse = {
-  data: DbNewsRow[]
-}
-
-const API_V1 = "/api/v1"
-const NEWS_BASE = `${API_V1}/news`
-
-// Hardcoded tag universe for MVP (same idea as your Databricks allowed tags)
-const ALLOWED_TAGS = [
-  "supply",
-  "demand",
-  "shipping",
-  "price",
-  "macro",
-  "geopolitics",
-  "outage",
-  "maintenance",
-  "sanctions",
-  "weather",
-  "policy",
-  "company",
-  "project",
-  "infrastructure_trade",
-  "storage",
-  "regas",
-  "liquefaction",
-] as const
-
+// ------------------------------------------------------
+// Constants
+// ------------------------------------------------------
 const REGIONS = [
   "US",
   "China",
@@ -86,43 +44,9 @@ const REGIONS = [
   "Northeast Asia",
 ] as const
 
-export type NewsCategory =
-  | "Top"
-  | "Favourites"
-  | "LNG"
-  | "Macro"
-  | "Geopolitics"
-  | "Shipping"
-  | "Company"
-
-const TAG_TO_CATEGORY: Record<string, NewsCategory> = {
-  top: "Top",
-  favourites: "Favourites",
-  lng: "LNG",
-  macro: "Macro",
-  geopolitics: "Geopolitics",
-  shipping: "Shipping",
-  company: "Company",
-}
-
-export function inferCategories(n: DbNewsRow): NewsCategory[] {
-  const out = new Set<NewsCategory>()
-
-  // special case: favourited => include Favourites category
-  if (n.favourited) out.add("Favourites")
-
-  for (const raw of n.tags ?? []) {
-    const tag = raw.toLowerCase().trim()
-    const cat = TAG_TO_CATEGORY[tag]
-    if (cat) out.add(cat)
-  }
-
-  // default if nothing matched
-  if (out.size === 0) out.add("LNG")
-
-  return Array.from(out)
-}
-
+// ------------------------------------------------------
+// Helpers
+// ------------------------------------------------------
 function formatTime(iso: string | null) {
   if (!iso) return "—"
   const d = new Date(iso)
@@ -135,62 +59,48 @@ function formatTime(iso: string | null) {
   })
 }
 
+function startOfDay(d: Date) {
+  const x = new Date(d)
+  x.setHours(0, 0, 0, 0)
+  return x
+}
+
+function endOfDay(d: Date) {
+  const x = new Date(d)
+  x.setHours(23, 59, 59, 999)
+  return x
+}
+
+function parseISO(iso: string | null) {
+  if (!iso) return null
+  const d = new Date(iso)
+  return Number.isNaN(+d) ? null : d
+}
+
 function readTimeMinFromContent(content: string | null) {
   if (!content) return 2
   const words = content.trim().split(/\s+/).filter(Boolean).length
   return Math.max(2, Math.min(10, Math.round(words / 220)))
 }
 
-async function apiGetNews(limit = 200, favouritedOnly = false): Promise<DbNewsRow[]> {
-  const url = new URL(NEWS_BASE, window.location.origin)
-  url.searchParams.set("limit", String(limit))
-  url.searchParams.set("favourited_only", favouritedOnly ? "true" : "false")
-  console.log(url.toString())
-  const res = await fetch(url.toString(), { method: "GET" })
-  if (!res.ok) throw new Error(`GET /news failed (${res.status})`)
-  const json = (await res.json()) as NewsListResponse
-  return json.data ?? []
-}
-
-async function apiPatchFavourite(articleKey: string, favourited: boolean) {
-  const res = await fetch(`${NEWS_BASE}/${encodeURIComponent(articleKey)}/favourite`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ favourited }),
-  })
-  if (!res.ok) throw new Error(`PATCH favourite failed (${res.status})`)
-}
-
-async function apiPatchSentiment(articleKey: string, official_sentiment: DbSentiment) {
-  const res = await fetch(`${NEWS_BASE}/${encodeURIComponent(articleKey)}/sentiment`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ official_sentiment }),
-  })
-  if (!res.ok) throw new Error(`PATCH sentiment failed (${res.status})`)
-}
-
-async function apiPatchTags(articleKey: string, tags: string[], region: string | null) {
-  const res = await fetch(`${NEWS_BASE}/${encodeURIComponent(articleKey)}/tags`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tags, region }),
-  })
-  if (!res.ok) throw new Error(`PATCH tags failed (${res.status})`)
+function formatSentimentLabel(sentiment: DbSentiment) {
+  if (!sentiment) return null
+  return sentiment.charAt(0).toUpperCase() + sentiment.slice(1)
 }
 
 function getNewsQueryOptions() {
   return {
     queryKey: ["newsletter", "news"],
-    queryFn: () => apiGetNews(200, false),
+    queryFn: () => getNews(200, false),
   }
 }
 
+// ------------------------------------------------------
+// Route
+// ------------------------------------------------------
 export const Route = createFileRoute("/_layout/newsletter")({
   component: NewsletterRoute,
-  head: () => ({
-    meta: [{ title: "Newsletter - LNG Views" }],
-  }),
+  head: () => ({ meta: [{ title: "Newsletter - LNG Views" }] }),
 })
 
 function PendingNewsletter() {
@@ -227,67 +137,131 @@ function NewsletterRoute() {
   )
 }
 
+// ------------------------------------------------------
+// Main
+// ------------------------------------------------------
 function Newsletter() {
   const { data } = useSuspenseQuery(getNewsQueryOptions())
   const qc = useQueryClient()
+  const [expandedArticleId, setExpandedArticleId] = useState<number | null>(null)
 
-  const [tab, setTab] = useState<NewsCategory>("Top")
+  // UI state
   const [query, setQuery] = useState("")
   const [sentiment, setSentiment] = useState<"All" | "Bullish" | "Bearish" | "Neutral">("All")
 
-  const categories: NewsCategory[] = useMemo(
-    () => ["Top", "Favourites", "LNG", "Macro", "Geopolitics", "Shipping", "Company"],
-    []
-  )
+  // Filters
+  const [favFilter, setFavFilter] = useState<FavFilter>("All")
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]) // [] = all
+  const [regionFilter, setRegionFilter] = useState<string[]>([]) // [] = all
+  const [dateFrom, setDateFrom] = useState("") // YYYY-MM-DD
+  const [dateTo, setDateTo] = useState("") // YYYY-MM-DD
 
+  // Derived data
+  const categoryUniverse = useMemo(() => {
+    const set = new Set<string>()
+    for (const n of data ?? []) {
+      for (const category of n.category ?? []) {
+        const value = category.trim()
+        if (value) set.add(value)
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [data])
+
+  const regionUniverse = useMemo(() => {
+    const set = new Set<string>(REGIONS)
+    for (const n of data ?? []) {
+      for (const region of n.region ?? []) {
+        const value = region.trim()
+        if (value) set.add(value)
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [data])
+
+  const normalized = useMemo(() => {
+    return (data ?? []).map((n) => ({
+      ...n,
+      readTimeMin: readTimeMinFromContent(n.body),
+      category_norm: (n.category ?? []).map((x) => x.trim()).filter(Boolean),
+      region_norm: (n.region ?? []).map((x) => x.trim()).filter(Boolean),
+      important_story: isImportantStory(n.importantStory),
+    }))
+  }, [data])
+
+  // Mutations
   const favouriteMutation = useMutation({
-    mutationFn: async (p: { article_key: string; favourited: boolean }) =>
-      apiPatchFavourite(p.article_key, p.favourited),
+    mutationFn: (p: { id: number; favourited: boolean }) => patchFavourite(p.id, p.favourited),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["newsletter", "news"] })
     },
   })
 
   const sentimentMutation = useMutation({
-    mutationFn: async (p: { article_key: string; official_sentiment: DbSentiment }) =>
-      apiPatchSentiment(p.article_key, p.official_sentiment),
+    mutationFn: (p: { id: number; official_sentiment: DbSentiment }) =>
+      patchSentiment(p.id, p.official_sentiment),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["newsletter", "news"] })
     },
   })
 
-  const tagsMutation = useMutation({
-    mutationFn: async (p: { article_key: string; tags: string[]; region: string | null }) =>
-      apiPatchTags(p.article_key, p.tags, p.region),
+  const classificationMutation = useMutation({
+    mutationFn: (p: { id: number; category: string[]; region: string[] }) =>
+      patchClassification(p.id, p.category, p.region),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["newsletter", "news"] })
     },
   })
-
-  const normalized = useMemo(() => {
-    return (data ?? []).map((n) => ({
-      ...n,
-      category: inferCategories(n),
-      readTimeMin: readTimeMinFromContent(n.content),
-    }))
-  }, [data])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     let rows = [...normalized]
 
-    if (tab === "Favourites") rows = rows.filter((x) => x.favourited)
-    else if (tab !== "Top") rows = rows.filter((x) => tab in x.category)
+    // Favourites tri-state
+    if (favFilter === "Favourites") rows = rows.filter((x) => x.favourited)
+    if (favFilter === "NotFavourites") rows = rows.filter((x) => !x.favourited)
 
-    if (sentiment !== "All") rows = rows.filter((x) => x.official_sentiment === sentiment)
+    // Category multi-select
+    if (categoryFilter.length > 0) {
+      rows = rows.filter((x) => categoryFilter.some((selected) => x.category_norm.includes(selected)))
+    }
 
+    // Region multi-select: includes "__none__" special
+    if (regionFilter.length > 0) {
+      rows = rows.filter((x) => {
+        const hasNone = regionFilter.includes("__none__")
+        const regionVals = regionFilter.filter((r) => r !== "__none__")
+        const regionOk = regionVals.some((selected) => x.region_norm.includes(selected))
+        const noneOk = x.region_norm.length === 0 && hasNone
+        return regionOk || noneOk
+      })
+    }
+
+    // Sentiment filter
+    if (sentiment !== "All") rows = rows.filter((x) => x.official_sentiment === sentiment.toLowerCase())
+
+    // Date range filter
+    if (dateFrom || dateTo) {
+      const from = dateFrom ? startOfDay(new Date(`${dateFrom}T00:00:00`)) : null
+      const to = dateTo ? endOfDay(new Date(`${dateTo}T00:00:00`)) : null
+
+      rows = rows.filter((x) => {
+        const d = parseISO(x.rtpTimestamp)
+        if (!d) return false
+        if (from && d < from) return false
+        if (to && d > to) return false
+        return true
+      })
+    }
+
+    // Search
     if (q) {
       rows = rows.filter((x) => {
         const hay = [
-          x.title,
-          x.source,
-          x.region ?? "",
-          ...(x.tags ?? []),
+          x.headline,
+          x.source ?? "",
+          ...x.region_norm,
+          ...x.category_norm,
         ]
           .join(" ")
           .toLowerCase()
@@ -295,37 +269,121 @@ function Newsletter() {
       })
     }
 
-    rows.sort((a, b) => +new Date(b.published_at ?? 0) - +new Date(a.published_at ?? 0))
+    rows.sort((a, b) => {
+      if (a.important_story !== b.important_story) {
+        return a.important_story ? -1 : 1
+      }
+      return +new Date(b.rtpTimestamp ?? 0) - +new Date(a.rtpTimestamp ?? 0)
+    })
     return rows
-  }, [normalized, query, sentiment, tab])
+  }, [normalized, query, favFilter, categoryFilter, regionFilter, sentiment, dateFrom, dateTo])
 
-  const topStories = useMemo(() => filtered.slice(0, 4), [filtered])
-  const feed = useMemo(() => filtered.slice(0, 20), [filtered])
+  const feed = useMemo(() => filtered.slice(0, 40), [filtered])
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">Newsletter</h1>
-          <p className="text-muted-foreground">
-            Live analyst feed (MVP) — favourites, official sentiment, tags, region.
-          </p>
-        </div>
+      {/* Title */}
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight">Newsletter</h1>
+        <p className="text-muted-foreground">
+          Live analyst feed (MVP) — favourites, official sentiment, category, region.
+        </p>
+      </div>
 
-        <div className="flex w-full flex-col gap-2 md:w-[520px]">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search headlines, tags, region..."
-              className="pl-9"
-            />
+      {/* Bloomberg-ish filter toolbar */}
+      <div className="rounded-lg border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex flex-col gap-3 p-3">
+          {/* Row 1 */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[260px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search headline, source, category, region..."
+                className="h-9 pl-9"
+              />
+            </div>
+
+            <div className="hidden md:block h-6 w-px bg-border" />
+
+            {/* Favourites */}
+            <Select value={favFilter} onValueChange={(v) => setFavFilter(v as FavFilter)}>
+              <SelectTrigger className="h-9 w-[180px]">
+                <SelectValue placeholder="Favourites" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All</SelectItem>
+                <SelectItem value="Favourites">Favourites</SelectItem>
+                <SelectItem value="NotFavourites">No favourites</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Category multi-select */}
+            <div className="w-[220px]">
+              <MultiSelectPopover
+                label="Category"
+                options={categoryUniverse}
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+                emptyLabel="All categories"
+              />
+            </div>
+
+            {/* Region multi-select */}
+            <div className="w-[220px]">
+              <MultiSelectPopover
+                label="Region"
+                options={["__none__", ...regionUniverse]}
+                value={regionFilter}
+                onChange={setRegionFilter}
+                emptyLabel="All regions"
+                renderOption={(o) => (o === "__none__" ? "No region" : o)}
+              />
+            </div>
+
+            <div className="hidden md:block h-6 w-px bg-border" />
+
+            {/* Date range */}
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="h-9 w-[150px]"
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="h-9 w-[150px]"
+              />
+            </div>
+
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-9"
+              onClick={() => {
+                setQuery("")
+                setSentiment("All")
+                setFavFilter("All")
+                setCategoryFilter([])
+                setRegionFilter([])
+                setDateFrom("")
+                setDateTo("")
+              }}
+            >
+              Reset
+            </Button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <div className="inline-flex items-center gap-2 text-muted-foreground">
+          {/* Row 2: sentiment pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 text-xs text-muted-foreground mr-1">
               <Filter className="h-4 w-4" />
               Sentiment
             </div>
@@ -336,323 +394,282 @@ function Newsletter() {
                 type="button"
                 variant={sentiment === s ? "default" : "secondary"}
                 size="sm"
+                className="h-8"
                 onClick={() => setSentiment(s)}
               >
-                {s === "All" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
+                {s}
               </Button>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Tabs + Layout */}
-      <Tabs value={tab} onValueChange={(v) => setTab(v as NewsCategory)}>
-        <TabsList className="flex flex-wrap justify-start">
-          {categories.map((c) => (
-            <TabsTrigger key={c} value={c}>
-              {c}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      {/* Content */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Main feed */}
+        <div className="lg:col-span-8 space-y-4">
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-base">Live Feed</CardTitle>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  From backend (mock now, Databricks later)
+                </div>
+              </div>
+            </CardHeader>
 
-        <TabsContent value={tab} className="mt-6">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            {/* Main feed */}
-            <div className="lg:col-span-8 space-y-4">
-              <Card className="overflow-hidden">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <CardTitle className="text-base">Live Feed</CardTitle>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Clock className="h-4 w-4" />
-                      From backend (mock now, Databricks later)
-                    </div>
-                  </div>
-                </CardHeader>
+            <CardContent className="pt-0">
+              {feed.length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  No matching stories.
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {feed.map((n) => (
+                    <article key={n.id} className="py-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 space-y-2">
+                          {/* Meta row */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {n.important_story && <Badge variant="default">Important</Badge>}
 
-                <CardContent className="pt-0">
-                  {feed.length === 0 ? (
-                    <div className="py-10 text-center text-sm text-muted-foreground">
-                      No matching stories.
-                    </div>
-                  ) : (
-                    <div className="divide-y">
-                      {feed.map((n) => (
-                        <article key={n.article_key} className="py-4">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0 space-y-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant="outline">{n.category}</Badge>
+                            {n.official_sentiment && (
+                              <Badge
+                                variant={
+                                  n.official_sentiment === "bullish"
+                                    ? "default"
+                                    : n.official_sentiment === "bearish"
+                                    ? "destructive"
+                                    : "secondary"
+                                }
+                              >
+                                {formatSentimentLabel(n.official_sentiment)}
+                              </Badge>
+                            )}
 
-                                {n.official_sentiment && (
-                                  <Badge
-                                    variant={
-                                      n.official_sentiment === "Bullish"
-                                        ? "default"
-                                        : n.official_sentiment === "Bearish"
-                                        ? "destructive"
-                                        : "secondary"
-                                    }
-                                  >
-                                    {n.official_sentiment}
-                                  </Badge>
-                                )}
+                            {n.region_norm.map((region) => (
+                              <Badge key={`region-${n.id}-${region}`} variant="secondary">
+                                {region}
+                              </Badge>
+                            ))}
+                            {n.category_norm.map((category) => (
+                              <Badge key={`category-${n.id}-${category}`} variant="outline">
+                                {category}
+                              </Badge>
+                            ))}
 
-                                {n.region && <Badge variant="secondary">{n.region}</Badge>}
+                            <span className="text-xs text-muted-foreground">
+                              {n.source} • {formatTime(n.rtpTimestamp)} • {readTimeMinFromContent(n.body)} min
+                            </span>
+                          </div>
 
-                                <span className="text-xs text-muted-foreground">
-                                  {n.source} • {formatTime(n.published_at)} • {n.readTimeMin} min
-                                </span>
-                              </div>
+                          <button
+                            type="button"
+                            className="text-left"
+                            onClick={() => setExpandedArticleId((current) => (current === n.id ? null : n.id))}
+                          >
+                            <h2 className="text-base font-semibold leading-snug hover:underline">{n.headline}</h2>
+                          </button>
 
-                              <h2 className="text-base font-semibold leading-snug">
-                                {n.title}
-                              </h2>
+                          {n.summary && (
+                            <p className="text-sm text-muted-foreground line-clamp-2">{n.summary}</p>
+                          )}
 
-                              {n.content && (
-                                <p className="text-sm text-muted-foreground line-clamp-2">
-                                  {n.content}
-                                </p>
-                              )}
+                          {expandedArticleId === n.id && n.body && (
+                            <div className="rounded-md border bg-muted/30 p-3">
+                              <p className="text-sm text-foreground whitespace-pre-wrap">{n.body}</p>
+                            </div>
+                          )}
 
-                              {(n.tags?.length ?? 0) > 0 && (
-                                <div className="flex flex-wrap gap-2 pt-1">
-                                  {n.tags.map((t) => (
-                                    <Badge key={t} variant="outline" className="text-xs">
-                                      {t}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
+                          {/* Analyst controls */}
+                          <div className="flex flex-wrap items-center gap-2 pt-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={n.favourited ? "default" : "secondary"}
+                              onClick={() => {
+                                if (favouriteMutation.isPending) return
+                                favouriteMutation.mutate({
+                                  id: n.id,
+                                  favourited: !n.favourited,
+                                })
+                              }}
+                            >
+                              <Bookmark className="h-4 w-4 mr-2" />
+                              {n.favourited ? "Favourited" : "Favourite"}
+                            </Button>
 
-                              {/* Analyst controls */}
-                              <div className="flex flex-wrap items-center gap-2 pt-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant={n.favourited ? "default" : "secondary"}
-                                  onClick={() => {
-                                    if (favouriteMutation.isPending) return
-                                    favouriteMutation.mutate({
-                                      article_key: n.article_key,
-                                      favourited: !n.favourited,
-                                    })
-                                  }}
-                                >
-                                  <Bookmark className="h-4 w-4 mr-2" />
-                                  {n.favourited ? "Favourited" : "Favourite"}
-                                </Button>
-
-                                <div className="inline-flex items-center gap-1">
-                                  {(["Bullish", "Neutral", "Bearish"] as const).map((s) => (
-                                    <Button
-                                      key={s}
-                                      type="button"
-                                      size="sm"
-                                      variant={n.official_sentiment === s ? "default" : "secondary"}
-                                      onClick={() => {
-                                        if (sentimentMutation.isPending) return
-                                        sentimentMutation.mutate({
-                                          article_key: n.article_key,
-                                          official_sentiment: s,
-                                        })
-                                      }}
-                                    >
-                                      {s}
-                                      {n.official_sentiment === s && (
-                                        <Check className="h-4 w-4 ml-2" />
-                                      )}
-                                    </Button>
-                                  ))}
-
+                            {/* sentiment toggles (NOTE: clearing won't work until backend accepts null) */}
+                            <div className="inline-flex items-center gap-1">
+                              {(["bullish", "neutral", "bearish"] as const).map((s) => {
+                                const active = n.official_sentiment === s
+                                return (
                                   <Button
+                                    key={s}
                                     type="button"
                                     size="sm"
-                                    variant={n.official_sentiment === null ? "default" : "secondary"}
+                                    variant={active ? "default" : "secondary"}
                                     onClick={() => {
                                       if (sentimentMutation.isPending) return
                                       sentimentMutation.mutate({
-                                        article_key: n.article_key,
-                                        official_sentiment: null,
+                                        id: n.id,
+                                        official_sentiment: active ? null : s,
                                       })
                                     }}
                                   >
-                                    clear
+                                    {formatSentimentLabel(s)}
+                                    {active && <Check className="h-4 w-4 ml-2" />}
                                   </Button>
-                                </div>
-
-                                <TagPicker
-                                  current={n.tags ?? []}
-                                  onApply={(next) => {
-                                    if (tagsMutation.isPending) return
-                                    tagsMutation.mutate({
-                                      article_key: n.article_key,
-                                      tags: next,
-                                      region: n.region ?? null,
-                                    })
-                                  }}
-                                />
-
-                                <RegionPicker
-                                  value={n.region ?? null}
-                                  onChange={(nextRegion) => {
-                                    if (tagsMutation.isPending) return
-                                    tagsMutation.mutate({
-                                      article_key: n.article_key,
-                                      tags: n.tags ?? [],
-                                      region: nextRegion,
-                                    })
-                                  }}
-                                />
-                              </div>
+                                )
+                              })}
                             </div>
 
-                            <div className="flex shrink-0 items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                title="Open"
-                                onClick={() => {
-                                  if (n.url) window.open(n.url, "_blank", "noopener,noreferrer")
-                                }}
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                            <CategoryPicker
+                              allCategories={categoryUniverse}
+                              current={n.category_norm}
+                              onApply={(next) => {
+                                if (classificationMutation.isPending) return
+                                classificationMutation.mutate({
+                                  id: n.id,
+                                  category: next,
+                                  region: n.region_norm,
+                                })
+                              }}
+                            />
 
-            {/* Sidebar */}
-            <div className="lg:col-span-4 space-y-4">
-              {/* <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">Top Stories</CardTitle>
-                    <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                      <TrendingUp className="h-4 w-4" />
-                      Newest
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-3">
-                    {topStories.map((n, idx) => (
-                      <div key={n.article_key} className="space-y-2">
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-xs font-semibold">
-                            {idx + 1}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline" className="text-xs">
-                                {n.category}
-                              </Badge>
-                              {n.official_sentiment && (
-                                <span className="text-xs text-muted-foreground">
-                                  {n.official_sentiment}
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-1 text-sm font-medium leading-snug">
-                              {n.title}
-                            </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {formatTime(n.published_at)} • {n.readTimeMin} min
-                            </div>
+                            <RegionPicker
+                              options={regionUniverse}
+                              value={n.region_norm}
+                              onChange={(nextRegion) => {
+                                if (classificationMutation.isPending) return
+                                classificationMutation.mutate({
+                                  id: n.id,
+                                  category: n.category_norm,
+                                  region: nextRegion,
+                                })
+                              }}
+                            />
                           </div>
                         </div>
-                        {idx !== topStories.length - 1 && <Separator />}
+
+                        {/* Open */}
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setExpandedArticleId((current) => (current === n.id ? null : n.id))}
+                          >
+                            {expandedArticleId === n.id ? "Hide body" : "Show body"}
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            title="Open"
+                            onClick={() => {
+                              if (n.documentUrl) window.open(n.documentUrl, "_blank", "noopener,noreferrer")
+                            }}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card> */}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Quick Links</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="flex flex-col gap-2 text-sm">
-                    <RouterLink
-                      to="/news_summary"
-                      className="rounded-md border px-3 py-2 hover:bg-muted transition-colors"
-                    >
-                      News Summary
-                    </RouterLink>
+        {/* Sidebar */}
+        <div className="lg:col-span-4 space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Quick Links</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="flex flex-col gap-2 text-sm">
+                <RouterLink
+                  to="/news_summary"
+                  className="rounded-md border px-3 py-2 hover:bg-muted transition-colors"
+                >
+                  News Summary
+                </RouterLink>
 
-                    <RouterLink
-                      to="/newsletter"
-                      className="rounded-md border px-3 py-2 hover:bg-muted transition-colors"
-                    >
-                      Newsletter (this page)
-                    </RouterLink>
+                <RouterLink
+                  to="/newsletter"
+                  className="rounded-md border px-3 py-2 hover:bg-muted transition-colors"
+                >
+                  Newsletter (this page)
+                </RouterLink>
 
-                    <div className="text-xs text-muted-foreground pt-2">
-                      When Databricks is ready, only backend changes; UI stays.
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
+                <div className="text-xs text-muted-foreground pt-2">
+                  When Databricks is ready, only backend changes; UI stays.
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   )
 }
 
-function TagPicker(props: { current: string[]; onApply: (next: string[]) => void }) {
+// ------------------------------------------------------
+// Components
+// ------------------------------------------------------
+function CategoryPicker(props: {
+  allCategories: string[]
+  current: string[]
+  onApply: (next: string[]) => void
+}) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<string[]>(props.current)
 
-  // keep draft in sync when list updates after refetch
-  if (!open && draft.join("|") !== props.current.join("|")) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    // (We intentionally do this only when closed; avoids annoying overwrites.)
-    setDraft(props.current)
-  }
+  useEffect(() => {
+    if (!open) setDraft(props.current)
+  }, [open, props.current])
 
-  const toggle = (t: string) => {
+  const toggle = (value: string) => {
     setDraft((prev) => {
-      const has = prev.includes(t)
-      const next = has ? prev.filter((x) => x !== t) : [...prev, t]
-      // enforce up to 3 tags
-      return next.slice(0, 3)
+      const has = prev.includes(value)
+      return has ? prev.filter((x) => x !== value) : [...prev, value]
     })
   }
 
   return (
     <div className="flex items-center gap-2">
       <Button type="button" size="sm" variant="secondary" onClick={() => setOpen((v) => !v)}>
-        Tags ({props.current.length}/3)
+        Category ({props.current.length})
       </Button>
+
       {open && (
         <div className="rounded-md border bg-background p-2 shadow-sm max-w-[520px]">
           <div className="flex flex-wrap gap-2">
-            {ALLOWED_TAGS.map((t) => {
-              const active = draft.includes(t)
+            {props.allCategories.map((category) => {
+              const active = draft.includes(category)
               return (
                 <Button
-                  key={t}
+                  key={category}
                   type="button"
                   size="sm"
                   variant={active ? "default" : "secondary"}
-                  onClick={() => toggle(t)}
+                  onClick={() => toggle(category)}
                 >
-                  {t}
+                  {category}
                 </Button>
               )
             })}
           </div>
+
           <div className="flex items-center justify-end gap-2 pt-2">
+            <Button type="button" size="sm" variant="secondary" onClick={() => setDraft([])}>
+              Clear
+            </Button>
             <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(false)}>
               Close
             </Button>
@@ -673,25 +690,155 @@ function TagPicker(props: { current: string[]; onApply: (next: string[]) => void
   )
 }
 
-function RegionPicker(props: { value: string | null; onChange: (next: string | null) => void }) {
+function RegionPicker(props: {
+  options: string[]
+  value: string[]
+  onChange: (next: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState<string[]>(props.value)
+
+  useEffect(() => {
+    if (!open) setDraft(props.value)
+  }, [open, props.value])
+
+  const toggle = (value: string) => {
+    setDraft((prev) => {
+      const has = prev.includes(value)
+      return has ? prev.filter((x) => x !== value) : [...prev, value]
+    })
+  }
+
   return (
-    <div className="min-w-[220px]">
-      <Select
-        value={props.value ?? "__none__"}
-        onValueChange={(v) => props.onChange(v === "__none__" ? null : v)}
+    <div className="flex items-center gap-2">
+      <Button type="button" size="sm" variant="secondary" onClick={() => setOpen((v) => !v)}>
+        Region ({props.value.length})
+      </Button>
+
+      {open && (
+        <div className="rounded-md border bg-background p-2 shadow-sm max-w-[520px]">
+          <div className="flex flex-wrap gap-2">
+            {props.options.map((region) => {
+              const active = draft.includes(region)
+              return (
+                <Button
+                  key={region}
+                  type="button"
+                  size="sm"
+                  variant={active ? "default" : "secondary"}
+                  onClick={() => toggle(region)}
+                >
+                  {region}
+                </Button>
+              )
+            })}
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button type="button" size="sm" variant="secondary" onClick={() => setDraft([])}>
+              Clear
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(false)}>
+              Close
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                props.onChange(draft)
+                setOpen(false)
+              }}
+            >
+              Apply
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MultiSelectPopover(props: {
+  label: string
+  options: readonly string[] | string[]
+  value: string[]
+  onChange: (next: string[]) => void
+  emptyLabel?: string
+  renderOption?: (opt: string) => string
+}) {
+  const { label, options, value, onChange, emptyLabel = "All", renderOption } = props
+
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState<string[]>(value)
+
+  useEffect(() => {
+    if (!open) setDraft(value)
+  }, [open, value])
+
+  const toggle = (opt: string) => {
+    setDraft((prev) => {
+      const has = prev.includes(opt)
+      return has ? prev.filter((x) => x !== opt) : [...prev, opt]
+    })
+  }
+
+  const title = value.length === 0 ? emptyLabel : `${value.length} selected`
+
+  return (
+    <div className="relative">
+      <Button
+        type="button"
+        variant="secondary"
+        className="h-9 w-full justify-between"
+        onClick={() => setOpen((v) => !v)}
       >
-        <SelectTrigger className="h-9">
-          <SelectValue placeholder="Region" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__none__">No region</SelectItem>
-          {REGIONS.map((r) => (
-            <SelectItem key={r} value={r}>
-              {r}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="truncate font-medium">{title}</span>
+      </Button>
+
+      {open && (
+        <div className="absolute z-50 mt-2 w-full rounded-md border bg-background p-2 shadow-sm">
+          <div className="flex flex-wrap gap-2">
+            {options.map((opt) => {
+              const active = draft.includes(opt)
+              const text = renderOption ? renderOption(opt) : opt
+              return (
+                <Button
+                  key={opt}
+                  type="button"
+                  size="sm"
+                  variant={active ? "default" : "secondary"}
+                  onClick={() => toggle(opt)}
+                >
+                  {text}
+                </Button>
+              )
+            })}
+          </div>
+
+          <div className="flex items-center justify-between pt-3">
+            <Button type="button" size="sm" variant="secondary" onClick={() => setDraft([])}>
+              Clear
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(false)}>
+                Close
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  onChange(draft)
+                  setOpen(false)
+                }}
+              >
+                Apply
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

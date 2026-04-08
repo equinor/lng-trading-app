@@ -7,34 +7,8 @@ import { ExternalLink, Bookmark } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-
-type DbSentiment = "Bullish" | "Bearish" | "Neutral" | null
-
-type DbNewsRow = {
-  article_key: string
-  source: string
-  external_id: string | null
-  title: string
-  url: string | null
-  published_at: string | null
-  content: string | null
-
-  favourited: boolean
-  official_sentiment: DbSentiment
-  tags: string[]
-  region: string | null
-
-  version: number
-  updated_at: string | null
-  updated_by: string | null
-}
-
-type NewsListResponse = { data: DbNewsRow[] }
-
-const API_V1 = "/api/v1"
-const NEWS_BASE = `${API_V1}/news`
+import { getNews, type DbNewsRow, type DbSentiment } from "@/services/news/news_api"
 
 function formatTime(iso: string | null) {
   if (!iso) return "—"
@@ -54,20 +28,15 @@ function readTimeMinFromContent(content: string | null) {
   return Math.max(2, Math.min(10, Math.round(words / 220)))
 }
 
-async function apiGetNews(limit = 500, favouritedOnly = true): Promise<DbNewsRow[]> {
-  const url = new URL(NEWS_BASE, window.location.origin)
-  url.searchParams.set("limit", String(limit))
-  url.searchParams.set("favourited_only", favouritedOnly ? "true" : "false")
-  const res = await fetch(url.toString(), { method: "GET" })
-  if (!res.ok) throw new Error(`GET /news failed (${res.status})`)
-  const json = (await res.json()) as NewsListResponse
-  return json.data ?? []
+function formatSentimentLabel(sentiment: DbSentiment) {
+  if (!sentiment) return null
+  return sentiment.charAt(0).toUpperCase() + sentiment.slice(1)
 }
 
 function getFavouritedNewsQueryOptions() {
   return {
     queryKey: ["news_summary", "favourited"],
-    queryFn: () => apiGetNews(500, true),
+    queryFn: () => getNews(500, true),
   }
 }
 
@@ -116,14 +85,14 @@ function NewsSummary() {
     const neutral: Array<DbNewsRow & { readTimeMin: number }> = []
 
     for (const n of fav) {
-      const row = { ...n, readTimeMin: readTimeMinFromContent(n.content) }
-      if (row.official_sentiment === "Bullish") bullish.push(row)
-      else if (row.official_sentiment === "Bearish") bearish.push(row)
+      const row = { ...n, readTimeMin: readTimeMinFromContent(n.body) }
+      if (row.official_sentiment === "bullish") bullish.push(row)
+      else if (row.official_sentiment === "bearish") bearish.push(row)
       else neutral.push(row) // Neutral or null => neutral bucket for summary page
     }
 
     const sortDesc = (a: DbNewsRow, b: DbNewsRow) =>
-      +new Date(b.published_at ?? 0) - +new Date(a.published_at ?? 0)
+      +new Date(b.rtpTimestamp ?? 0) - +new Date(a.rtpTimestamp ?? 0)
 
     bullish.sort(sortDesc)
     bearish.sort(sortDesc)
@@ -199,7 +168,7 @@ function SentimentPanel(props: {
         ) : (
           <div className="divide-y">
             {props.rows.map((n) => (
-              <article key={n.article_key} className="py-4">
+              <article key={n.id} className="py-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -208,38 +177,37 @@ function SentimentPanel(props: {
                       {n.official_sentiment && (
                         <Badge
                           variant={
-                            n.official_sentiment === "Bullish"
+                            n.official_sentiment === "bullish"
                               ? "default"
-                              : n.official_sentiment === "Bearish"
+                              : n.official_sentiment === "bearish"
                               ? "destructive"
                               : "secondary"
                           }
                         >
-                          {n.official_sentiment}
+                          {formatSentimentLabel(n.official_sentiment)}
                         </Badge>
                       )}
 
-                      {n.region && <Badge variant="secondary">{n.region}</Badge>}
+                      {n.region.map((region) => (
+                        <Badge key={`region-${n.id}-${region}`} variant="secondary">
+                          {region}
+                        </Badge>
+                      ))}
+                      {n.category.map((category) => (
+                        <Badge key={`category-${n.id}-${category}`} variant="outline">
+                          {category}
+                        </Badge>
+                      ))}
 
                       <span className="text-xs text-muted-foreground">
-                        {n.source} • {formatTime(n.published_at)} • {n.readTimeMin} min
+                        {n.source} • {formatTime(n.rtpTimestamp)} • {n.readTimeMin} min
                       </span>
                     </div>
 
-                    <h2 className="text-base font-semibold leading-snug">{n.title}</h2>
+                    <h2 className="text-base font-semibold leading-snug">{n.headline}</h2>
 
-                    {n.content && (
-                      <p className="text-sm text-muted-foreground line-clamp-2">{n.content}</p>
-                    )}
-
-                    {(n.tags?.length ?? 0) > 0 && (
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {n.tags.map((t) => (
-                          <Badge key={t} variant="outline" className="text-xs">
-                            {t}
-                          </Badge>
-                        ))}
-                      </div>
+                    {n.body && (
+                      <p className="text-sm text-muted-foreground line-clamp-2">{n.body}</p>
                     )}
 
                     <div className="flex flex-wrap items-center gap-2 pt-2">
@@ -257,7 +225,7 @@ function SentimentPanel(props: {
                       size="icon"
                       title="Open"
                       onClick={() => {
-                        if (n.url) window.open(n.url, "_blank", "noopener,noreferrer")
+                        if (n.documentUrl) window.open(n.documentUrl, "_blank", "noopener,noreferrer")
                       }}
                     >
                       <ExternalLink className="h-4 w-4" />

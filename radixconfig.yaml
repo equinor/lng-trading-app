@@ -1,0 +1,56 @@
+apiVersion: radix.equinor.com/v1
+kind: RadixApplication
+metadata:
+  name: lng-views
+spec:
+  build:
+    useBuildKit: true
+  environments:
+    - name: dev
+      build:
+        from: main
+    - name: prod
+      build:
+        from: release
+  components:
+    - name: backend
+      src: backend
+      dockerfileName: Dockerfile
+      ports:
+        - name: http
+          port: 8000
+      secrets:
+        - DATABRICKS_SERVER_HOSTNAME
+        - DATABRICKS_HTTP_PATH
+        - DATABRICKS_TOKEN
+      variables:
+        NEWS_BACKEND: databricks
+        NEWS_TABLE: ms_vulcan_gplng_plab.lng_apac.platts_lng_top_news
+      healthChecks:
+        livenessProbe:
+          httpGet:
+            port: 8000
+            path: /api/v1/utils/health-check
+          initialDelaySeconds: 20
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            port: 8000
+            path: /api/v1/utils/health-check
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+    - name: frontend
+      src: frontend
+      dockerfileName: Dockerfile
+      ports:
+        - name: http
+          port: 80
+      publicPort: http
+      environmentConfig:
+        - environment: dev
+          variables:
+            VITE_BYPASS_AUTH: "true"
+        - environment: prod
+          variables:
+            VITE_BYPASS_AUTH: "false"

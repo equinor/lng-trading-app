@@ -42,13 +42,33 @@ class Settings(BaseSettings):
     # --- Databricks SQL Warehouse connection ---
     DATABRICKS_SERVER_HOSTNAME: str | None = None
     DATABRICKS_HTTP_PATH: str | None = None
+    DATABRICKS_USE_SERVICE_PRINCIPAL: bool = False
+
+    # PAT auth (optional fallback)
     DATABRICKS_TOKEN: str | None = None
+
+    # Service Principal auth
+    DATABRICKS_TENANT_ID: str | None = None
+    DATABRICKS_CLIENT_ID: str | None = None
+    DATABRICKS_CLIENT_SECRET: str | None = None
+    # Azure name compatibility (if team uses AZURE_* env names)
+    AZURE_TENANT_ID: str | None = None
+    AZURE_CLIENT_ID: str | None = None
+    AZURE_CLIENT_SECRET: str | None = None
+    DATABRICKS_AAD_SCOPE: str = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/.default"
 
     # UC table name you are using
     NEWS_TABLE: str = "lng_apac.news_state"
 
     SENTRY_DSN: str | None = None
     NEWS_BACKEND: str = "mock"
+
+    # --- Mock backend tuning ---
+    MOCK_NEWS_SEED_COUNT: int = 12
+    MOCK_NEWS_MAX_TAGS: int = 3
+    MOCK_NEWS_TAG_NONE_PROBABILITY: float = 0.15
+    MOCK_NEWS_REGION_NONE_PROBABILITY: float = 0.15
+    MOCK_NEWS_SOURCE: str = "mock"
 
 
 

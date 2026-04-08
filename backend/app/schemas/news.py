@@ -5,27 +5,24 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Sentiment = Literal["Bullish", "Bearish", "Neutral"]
+Sentiment = Literal["bullish", "bearish", "neutral"]
 
 class NewsItem(BaseModel):
-    article_key: str
-    source: str | None = None
-    news_source: str | None = None
-    external_id: str | None = None
-    title: str
-    url: str | None = None
-    published_at: datetime | None = None
+    id: int
+    source_id: str
+    category: list[str] = Field(default_factory=list)
+    region: list[str] = Field(default_factory=list)
     summary: str | None = None
-    content: str | None = None
-
-    favourited: bool | None = None
+    headline: str
+    body: str | None = None
     official_sentiment: Sentiment | None = None
-    tags: list[str] = Field(default_factory=list)
-    region: str | None = None
-
-    version: int | None = None
-    updated_at: datetime | None = None
-    updated_by: str | None = None
+    favourited: bool | None = None
+    source: str | None = None
+    updatedDate: datetime | None = None
+    rtpTimestamp: datetime | None = None
+    publishedChannel: str | None = None
+    importantStory: str | None = None
+    documentUrl: str | None = None
 
 
 class NewsListResponse(BaseModel):
@@ -40,6 +37,6 @@ class SetSentimentBody(BaseModel):
     official_sentiment: Sentiment | None = None
 
 
-class SetTagsBody(BaseModel):
-    tags: list[str] = Field(default_factory=list, max_length=3)
-    region: str | None = None
+class SetClassificationBody(BaseModel):
+    category: list[str] = Field(default_factory=list)
+    region: list[str] = Field(default_factory=list)
