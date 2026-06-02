@@ -17,6 +17,7 @@ import {
   patchFavourite,
   patchClassification,
   patchSentiment,
+  type DbNewsRow,
   type DbSentiment,
 } from "@/services/news/news_api"
 
@@ -93,6 +94,16 @@ function getNewsQueryOptions() {
     queryKey: ["newsletter", "news"],
     queryFn: () => getNews(200, false),
   }
+}
+
+function mergePatchedArticle(
+  current: DbNewsRow[] | undefined,
+  patch: Partial<DbNewsRow> & Pick<DbNewsRow, "id">,
+) {
+  if (!current) return current
+  return current.map((article) =>
+    article.id === patch.id ? { ...article, ...patch } : article,
+  )
 }
 
 // ------------------------------------------------------
@@ -192,24 +203,30 @@ function Newsletter() {
   // Mutations
   const favouriteMutation = useMutation({
     mutationFn: (p: { id: number; favourited: boolean }) => patchFavourite(p.id, p.favourited),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["newsletter", "news"] })
+    onSuccess: async (updatedArticle) => {
+      qc.setQueryData<DbNewsRow[]>(["newsletter", "news"], (current) =>
+        mergePatchedArticle(current, updatedArticle),
+      )
     },
   })
 
   const sentimentMutation = useMutation({
     mutationFn: (p: { id: number; official_sentiment: DbSentiment }) =>
       patchSentiment(p.id, p.official_sentiment),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["newsletter", "news"] })
+    onSuccess: async (updatedArticle) => {
+      qc.setQueryData<DbNewsRow[]>(["newsletter", "news"], (current) =>
+        mergePatchedArticle(current, updatedArticle),
+      )
     },
   })
 
   const classificationMutation = useMutation({
     mutationFn: (p: { id: number; category: string[]; region: string[] }) =>
       patchClassification(p.id, p.category, p.region),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["newsletter", "news"] })
+    onSuccess: async (updatedArticle) => {
+      qc.setQueryData<DbNewsRow[]>(["newsletter", "news"], (current) =>
+        mergePatchedArticle(current, updatedArticle),
+      )
     },
   })
 

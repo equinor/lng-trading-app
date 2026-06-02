@@ -111,7 +111,22 @@ def update_article(
         category=normalized_category,
         region=normalized_region,
     )
+
     if changed == 0:
         raise KeyError(article_id)
 
-    return get_article(article_id)
+    updated: dict[str, Any] = {"id": article_id}
+
+    if normalized_favourited is not _UNSET:
+        updated["favourited"] = normalized_favourited
+
+    if normalized_official_sentiment is not _UNSET:
+        updated["official_sentiment"] = normalized_official_sentiment
+
+    if normalized_category is not _UNSET:
+        updated["category"] = _normalize_multi(normalized_category)
+
+    if normalized_region is not _UNSET:
+        updated["region"] = _normalize_multi(normalized_region)
+
+    return updated

@@ -1,0 +1,20 @@
+# Generated from Python imports across the repository.
+# Includes runtime and test dependencies.
+
+azure-identity
+databricks-sql-connector
+emails
+fastapi
+jinja2
+pydantic
+pydantic-settings
+pwdlib[argon2,bcrypt]
+PyJWT
+pyarrow
+sentry-sdk
+SQLAlchemy
+sqlmodel
+starlette
+
+# Test dependencies
+pytest

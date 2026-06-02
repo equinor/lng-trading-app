@@ -51,10 +51,12 @@ class Settings(BaseSettings):
     DATABRICKS_TENANT_ID: str | None = None
     DATABRICKS_CLIENT_ID: str | None = None
     DATABRICKS_CLIENT_SECRET: str | None = None
+    DATABRICKS_WORKSPACE_RESOURCE_ID: str | None = None
     # Azure name compatibility (if team uses AZURE_* env names)
     AZURE_TENANT_ID: str | None = None
     AZURE_CLIENT_ID: str | None = None
     AZURE_CLIENT_SECRET: str | None = None
+    AZURE_WORKSPACE_RESOURCE_ID: str | None = None
     DATABRICKS_AAD_SCOPE: str = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/.default"
 
     # UC table name you are using
