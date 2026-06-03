@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
+import { createFileRoute, Outlet, redirect, useRouterState } from "@tanstack/react-router"
 
 import { Footer } from "@/components/Common/Footer"
 import AppSidebar from "@/components/Sidebar/AppSidebar"
@@ -21,6 +21,11 @@ export const Route = createFileRoute("/_layout")({
 })
 
 function Layout() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+  const isNewsSummaryRoute = pathname === "/news_summary"
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -29,7 +34,7 @@ function Layout() {
           <SidebarTrigger className="-ml-1 text-muted-foreground" />
         </header>
         <main className="flex-1 p-6 md:p-8">
-          <div className="mx-auto max-w-7xl">
+          <div className={`mx-auto w-full ${isNewsSummaryRoute ? "max-w-none" : "max-w-7xl"}`}>
             <Outlet />
           </div>
         </main>
