@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { formatHtmlText } from "@/lib/utils"
 import {
   getNews,
   isImportantStory,
@@ -85,6 +86,19 @@ function readTimeMinFromContent(content: string | null) {
   if (!content) return 2
   const words = content.trim().split(/\s+/).filter(Boolean).length
   return Math.max(2, Math.min(10, Math.round(words / 220)))
+}
+
+function cleanTagValue(value: unknown) {
+  if (value == null) return ""
+  const text = String(value).trim()
+  if (!text) return ""
+
+  return text
+    .replace(/^\[+/, "")
+    .replace(/\]+$/, "")
+    .replace(/^['\"]+/, "")
+    .replace(/['\"]+$/, "")
+    .trim()
 }
 
 function formatSentimentLabel(sentiment: DbSentiment) {
@@ -168,7 +182,12 @@ function Newsletter() {
   const [readFilter, setReadFilter] = useState<ReadFilter>("All")
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]) // [] = all
   const [regionFilter, setRegionFilter] = useState<string[]>([]) // [] = all
-  const [dateFrom, setDateFrom] = useState("") // YYYY-MM-DD
+  const defaultDateFrom = useMemo(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 3)
+    return d.toISOString().slice(0, 10)
+  }, [])
+  const [dateFrom, setDateFrom] = useState(defaultDateFrom) // YYYY-MM-DD
   const [dateTo, setDateTo] = useState("") // YYYY-MM-DD
 
   // Derived data
@@ -176,7 +195,7 @@ function Newsletter() {
     const set = new Set<string>()
     for (const n of data ?? []) {
       for (const category of n.category ?? []) {
-        const value = category.trim()
+        const value = cleanTagValue(category)
         if (value) set.add(value)
       }
     }
@@ -187,7 +206,7 @@ function Newsletter() {
     const set = new Set<string>(REGIONS)
     for (const n of data ?? []) {
       for (const region of n.region ?? []) {
-        const value = region.trim()
+        const value = cleanTagValue(region)
         if (value) set.add(value)
       }
     }
@@ -198,8 +217,8 @@ function Newsletter() {
     return (data ?? []).map((n) => ({
       ...n,
       readTimeMin: readTimeMinFromContent(n.body),
-      category_norm: (n.category ?? []).map((x) => x.trim()).filter(Boolean),
-      region_norm: (n.region ?? []).map((x) => x.trim()).filter(Boolean),
+      category_norm: (n.category ?? []).map((x) => cleanTagValue(x)).filter(Boolean),
+      region_norm: (n.region ?? []).map((x) => cleanTagValue(x)).filter(Boolean),
       important_story: isImportantStory(n.importantStory),
     }))
   }, [data])
@@ -303,16 +322,16 @@ function Newsletter() {
       })
     }
 
-    rows.sort((a, b) => {
-      if (a.important_story !== b.important_story) {
-        return a.important_story ? -1 : 1
-      }
+    const sortByImportantThenNewest = (a: (typeof rows)[0], b: (typeof rows)[0]) => {
+      if (a.important_story !== b.important_story) return a.important_story ? -1 : 1
       return +new Date(b.rtpTimestamp ?? 0) - +new Date(a.rtpTimestamp ?? 0)
-    })
-    return rows
+    }
+    const unread = rows.filter((r) => !r.read).sort(sortByImportantThenNewest)
+    const read = rows.filter((r) => r.read).sort(sortByImportantThenNewest)
+    return [...unread, ...read]
   }, [normalized, query, favFilter, readFilter, categoryFilter, regionFilter, sentiment, dateFrom, dateTo])
 
-  const feed = useMemo(() => filtered.slice(0, 40), [filtered])
+  const feed = useMemo(() => filtered.slice(0, 100), [filtered])
 
   return (
     <div className="flex flex-col gap-6">
@@ -325,12 +344,12 @@ function Newsletter() {
       </div>
 
       {/* Bloomberg-ish filter toolbar */}
-      <div className="rounded-lg border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="rounded-lg border bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60">
         <div className="flex flex-col gap-3 p-3">
           {/* Row 1 */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Search */}
-            <div className="relative flex-1 min-w-[260px]">
+            <div className="relative flex-1 min-w-65">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
@@ -344,7 +363,7 @@ function Newsletter() {
 
             {/* Favourites */}
             <Select value={favFilter} onValueChange={(v) => setFavFilter(v as FavFilter)}>
-              <SelectTrigger className="h-9 w-[180px]">
+              <SelectTrigger className="h-9 w-45">
                 <SelectValue placeholder="Favourites" />
               </SelectTrigger>
               <SelectContent>
@@ -356,7 +375,7 @@ function Newsletter() {
 
             {/* Read status */}
             <Select value={readFilter} onValueChange={(v) => setReadFilter(v as ReadFilter)}>
-              <SelectTrigger className="h-9 w-[160px]">
+              <SelectTrigger className="h-9 w-40">
                 <SelectValue placeholder="Read status" />
               </SelectTrigger>
               <SelectContent>
@@ -367,7 +386,7 @@ function Newsletter() {
             </Select>
 
             {/* Category multi-select */}
-            <div className="w-[220px]">
+            <div className="w-55">
               <MultiSelectPopover
                 label="Category"
                 options={categoryUniverse}
@@ -378,7 +397,7 @@ function Newsletter() {
             </div>
 
             {/* Region multi-select */}
-            <div className="w-[220px]">
+            <div className="w-55">
               <MultiSelectPopover
                 label="Region"
                 options={["__none__", ...regionUniverse]}
@@ -397,14 +416,14 @@ function Newsletter() {
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="h-9 w-[150px]"
+                className="h-9 w-37.5"
               />
               <span className="text-xs text-muted-foreground">to</span>
               <Input
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="h-9 w-[150px]"
+                className="h-9 w-37.5"
               />
             </div>
 
@@ -420,7 +439,7 @@ function Newsletter() {
                 setReadFilter("All")
                 setCategoryFilter([])
                 setRegionFilter([])
-                setDateFrom("")
+                setDateFrom(defaultDateFrom)
                 setDateTo("")
               }}
             >
@@ -520,12 +539,16 @@ function Newsletter() {
                           </button>
 
                           {n.summary && (
-                            <p className="text-sm text-muted-foreground line-clamp-2">{n.summary}</p>
+                            <p className="text-sm leading-6 text-muted-foreground line-clamp-3 whitespace-pre-wrap">
+                              {formatHtmlText(n.summary)}
+                            </p>
                           )}
 
                           {expandedArticleId === n.id && n.body && (
-                            <div className="rounded-md border bg-muted/30 p-3">
-                              <p className="text-sm text-foreground whitespace-pre-wrap">{n.body}</p>
+                            <div className="rounded-md border bg-muted/20 px-4 py-3">
+                              <p className="text-sm leading-7 text-foreground whitespace-pre-wrap">
+                                {formatHtmlText(n.body)}
+                              </p>
                             </div>
                           )}
 
@@ -712,7 +735,7 @@ function CategoryPicker(props: {
       </Button>
 
       {open && (
-        <div className="rounded-md border bg-background p-2 shadow-sm max-w-[520px]">
+        <div className="rounded-md border bg-background p-2 shadow-sm max-w-130">
           <div className="flex flex-wrap gap-2">
             {props.allCategories.map((category) => {
               const active = draft.includes(category)
@@ -780,7 +803,7 @@ function RegionPicker(props: {
       </Button>
 
       {open && (
-        <div className="rounded-md border bg-background p-2 shadow-sm max-w-[520px]">
+        <div className="rounded-md border bg-background p-2 shadow-sm max-w-130">
           <div className="flex flex-wrap gap-2">
             {props.options.map((region) => {
               const active = draft.includes(region)

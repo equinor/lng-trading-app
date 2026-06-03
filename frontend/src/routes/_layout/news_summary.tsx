@@ -1,5 +1,5 @@
 // frontend/src/routes/_layout/news_summary.tsx
-import { useMemo } from "react"
+import { useEffect, useMemo } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { ExternalLink } from "lucide-react"
@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getNews, type DbNewsRow, type DbSentiment } from "@/services/news/news_api"
+import { formatHtmlText } from "@/lib/utils"
+import { getNews, type DbNewsRow } from "@/services/news/news_api"
 
 type SentimentKey = "bullish" | "bearish" | "neutral"
 type RowWithReadTime = DbNewsRow & { readTimeMin: number }
@@ -32,9 +33,36 @@ function readTimeMinFromContent(content: string | null) {
   return Math.max(2, Math.min(10, Math.round(words / 220)))
 }
 
-function formatSentimentLabel(sentiment: DbSentiment) {
-  if (!sentiment) return null
-  return sentiment.charAt(0).toUpperCase() + sentiment.slice(1)
+function cleanTagValue(value: unknown) {
+  if (value == null) return ""
+  const text = String(value).trim()
+  if (!text) return ""
+
+  return text
+    .replace(/^\[+/, "")
+    .replace(/\]+$/, "")
+    .replace(/^['\"]+/, "")
+    .replace(/['\"]+$/, "")
+    .trim()
+}
+
+function isImportantStory(value: string | null) {
+  if (!value) return false
+  return ["true", "1", "yes", "y", "important"].includes(value.trim().toLowerCase())
+}
+
+function toBool(value: unknown): boolean {
+  if (typeof value === "boolean") return value
+  if (value == null) return false
+  if (typeof value === "number") return value !== 0
+  const text = String(value).trim().toLowerCase()
+  return ["true", "1", "yes", "y", "t"].includes(text)
+}
+
+function toTimestampMillis(value: string | null | undefined): number {
+  if (!value) return 0
+  const t = new Date(value).getTime()
+  return Number.isFinite(t) ? t : 0
 }
 
 function getFavouritedNewsQueryOptions() {
@@ -84,6 +112,12 @@ function panelBadgeVariant(key: SentimentKey): "default" | "destructive" | "seco
   return "secondary"
 }
 
+function panelAccentColor(key: SentimentKey) {
+  if (key === "bullish") return "#00A651"
+  if (key === "bearish") return "#D7261E"
+  return "#0070C0"
+}
+
 function panelEmptyText(key: SentimentKey) {
   if (key === "bullish") return "No favourited bullish articles."
   if (key === "bearish") return "No favourited bearish articles."
@@ -99,13 +133,13 @@ export const Route = createFileRoute("/_layout/news_summary")({
 
 function PendingNewsSummary() {
   return (
-    <div className="flex h-[calc(100vh-170px)] min-h-0 flex-col gap-4 overflow-hidden">
+    <div className="flex flex-col gap-4">
       <div className="space-y-2">
         <Skeleton className="h-8 w-72" />
         <Skeleton className="h-4 w-130" />
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-2 xl:grid-rows-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:grid-rows-2">
         <Skeleton className="h-full w-full xl:col-start-1 xl:row-start-1 xl:row-span-2" />
         <Skeleton className="h-full w-full xl:col-start-2 xl:row-start-1" />
         <Skeleton className="h-full w-full xl:col-start-2 xl:row-start-2" />
@@ -119,11 +153,27 @@ function NewsSummaryRoute() {
 }
 
 function NewsSummary() {
+  useEffect(() => {
+    const href = "https://cdn.eds.equinor.com/font/eds-uprights-vf.css"
+    const existing = document.querySelector(`link[rel="stylesheet"][href="${href}"]`)
+
+    if (existing) return
+
+    const link = document.createElement("link")
+    link.rel = "stylesheet"
+    link.href = href
+    document.head.appendChild(link)
+
+    return () => {
+      link.remove()
+    }
+  }, [])
+
   const newsQuery = useQuery(getFavouritedNewsQueryOptions())
   const data = newsQuery.data
 
   const grouped = useMemo<GroupedRows>(() => {
-    const fav = (data ?? []).filter((x) => x.favourited)
+    const fav = (data ?? []).filter((x) => toBool(x.favourited))
 
     const bullish: RowWithReadTime[] = []
     const bearish: RowWithReadTime[] = []
@@ -136,14 +186,19 @@ function NewsSummary() {
       else neutral.push(row)
     }
 
-    const sortDesc = (a: DbNewsRow, b: DbNewsRow) =>
-      +new Date(b.rtpTimestamp ?? 0) - +new Date(a.rtpTimestamp ?? 0)
+    const sortWithinBucket = (a: DbNewsRow, b: DbNewsRow) => {
+      const importantRankA = isImportantStory(a.importantStory) ? 1 : 0
+      const importantRankB = isImportantStory(b.importantStory) ? 1 : 0
+      if (importantRankA !== importantRankB) return importantRankB - importantRankA
 
-    bullish.sort(sortDesc)
-    bearish.sort(sortDesc)
-    neutral.sort(sortDesc)
+      return toTimestampMillis(b.rtpTimestamp) - toTimestampMillis(a.rtpTimestamp)
+    }
 
-    return { bullish, bearish, neutral }
+    const bullishSorted = [...bullish].sort(sortWithinBucket)
+    const bearishSorted = [...bearish].sort(sortWithinBucket)
+    const neutralSorted = [...neutral].sort(sortWithinBucket)
+
+    return { bullish: bullishSorted, bearish: bearishSorted, neutral: neutralSorted }
   }, [data])
 
   const dominant = useMemo(() => getDominantSentiment(grouped), [grouped])
@@ -155,7 +210,7 @@ function NewsSummary() {
 
   if (newsQuery.isError) {
     return (
-      <div className="flex h-[calc(100vh-170px)] items-center justify-center text-sm text-muted-foreground">
+      <div className="flex items-center justify-center text-sm text-muted-foreground">
         Failed to load news summary.
       </div>
     )
@@ -164,15 +219,10 @@ function NewsSummary() {
   const keys: SentimentKey[] = ["bullish", "bearish", "neutral"]
 
   return (
-    <div className="flex h-[calc(100vh-170px)] min-h-0 flex-col gap-4 overflow-hidden">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">News Summary</h1>
-        <p className="text-muted-foreground">
-          Largest section auto-expands based on favourited volume. Dominant: {panelTitle(dominant)}.
-        </p>
-      </div>
+    <div className="flex flex-col gap-4" style={{ fontFamily: "Inter, sans-serif" }}>
+      <h1 className="text-lg font-bold tracking-tight" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>News Summary</h1>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-2 xl:grid-rows-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:grid-rows-2">
         {keys.map((key) => (
           <div key={key} className={panelLayoutClass(key, dominant)}>
             <SentimentPanel
@@ -196,23 +246,36 @@ function SentimentPanel(props: {
   emptyText: string
   isPrimary: boolean
 }) {
-  const maxVisible = props.isPrimary ? 8 : 4
-  const visibleRows = props.rows.slice(0, maxVisible)
-  const hiddenCount = Math.max(0, props.rows.length - visibleRows.length)
+  const visibleRows = props.rows
+  const bodyClamp = props.rows.length <= 1 ? "" : props.isPrimary ? "line-clamp-2" : "line-clamp-1"
 
   return (
-    <Card className="flex h-full min-h-0 flex-col overflow-hidden">
-      <CardHeader className="pb-2">
+    <Card className="flex flex-col overflow-hidden">
+      <CardHeader>
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base">{props.title}</CardTitle>
-          <div className="flex items-center gap-2">
+          <CardTitle
+            className="text-base"
+            style={{ fontFamily: "Equinor, Inter, sans-serif", color: panelAccentColor(props.title.toLowerCase() as SentimentKey) }}
+          >
+            {props.title}
+          </CardTitle>
+          {/* <div className="flex items-center gap-2">
             <Badge variant="outline">{props.rows.length}</Badge>
-            <Badge variant={props.badgeVariant}>{props.title}</Badge>
-          </div>
+            <Badge
+              variant={props.badgeVariant}
+              style={{
+                backgroundColor: panelAccentColor(props.title.toLowerCase() as SentimentKey),
+                borderColor: panelAccentColor(props.title.toLowerCase() as SentimentKey),
+                color: "white",
+              }}
+            >
+              {props.title}
+            </Badge>
+          </div> */}
         </div>
       </CardHeader>
 
-      <CardContent className="min-h-0 flex-1 overflow-hidden pt-0">
+      <CardContent className="pt-0">
         {visibleRows.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">{props.emptyText}</div>
         ) : (
@@ -222,7 +285,7 @@ function SentimentPanel(props: {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Badge variant="outline">Favourited</Badge>
+                      {/* <Badge variant="outline">Favourited</Badge>
 
                       {n.official_sentiment && (
                         <Badge
@@ -236,37 +299,46 @@ function SentimentPanel(props: {
                         >
                           {formatSentimentLabel(n.official_sentiment)}
                         </Badge>
-                      )}
+                      )} */}
 
-                      <span className="text-xs text-muted-foreground wrap-break-word">
-                        {n.source} • {formatTime(n.rtpTimestamp)} • {n.readTimeMin} min
+                      <span className="text-xs text-muted-foreground wrap-break-word" style={{ fontFamily: "Inter, sans-serif" }}>
+                        {n.source} • {formatTime(n.rtpTimestamp)}
                       </span>
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1 pl-3">
+                            {n.region.map((region) => (
+                                <Badge key={`region-${n.id}-${region}`} variant="secondary">
+                                {cleanTagValue(region)}
+                                </Badge>
+                            ))}
+                            {n.category.map((category) => (
+                                <Badge key={`category-${n.id}-${category}`} variant="outline">
+                                {cleanTagValue(category)}
+                                </Badge>
+                            ))}
+                            
+                        </div>
                     </div>
 
-                    <h2 className="text-sm font-semibold leading-snug wrap-break-word">{n.headline}</h2>
+                    <h2 className="text-sm font-semibold leading-snug wrap-break-word" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>{n.headline}</h2>
 
-                    {n.body && (
-                      <p
-                        className={`text-xs text-muted-foreground wrap-break-word ${
-                          props.isPrimary ? "line-clamp-2" : "line-clamp-1"
-                        }`}
-                      >
-                        {n.body}
+                    {n.summary && (
+                      <p className={`text-xs text-muted-foreground wrap-break-word ${bodyClamp}`}>
+                        {formatHtmlText(n.summary)}
                       </p>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    {/* <div className="flex flex-wrap items-center gap-1.5 pt-1">
                       {n.region.map((region) => (
                         <Badge key={`region-${n.id}-${region}`} variant="secondary">
-                          {region}
+                          {cleanTagValue(region)}
                         </Badge>
                       ))}
                       {n.category.map((category) => (
                         <Badge key={`category-${n.id}-${category}`} variant="outline">
-                          {category}
+                          {cleanTagValue(category)}
                         </Badge>
                       ))}
-                    </div>
+                    </div> */}
                   </div>
 
                   <div className="flex shrink-0 items-center gap-2">
@@ -285,10 +357,6 @@ function SentimentPanel(props: {
                 </div>
               </article>
             ))}
-
-            {hiddenCount > 0 && (
-              <div className="px-1 text-xs text-muted-foreground">+{hiddenCount} more in {props.title}</div>
-            )}
           </div>
         )}
       </CardContent>
