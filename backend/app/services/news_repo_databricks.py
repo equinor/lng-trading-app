@@ -20,6 +20,17 @@ def _normalize_input_sentiment(value: Any) -> str | None:
     return text.lower()
 
 
+def _normalize_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    return text in {"true", "1", "yes", "y", "t"}
+
+
 def _normalize_multi(value: Any) -> list[str]:
     if value is None:
         return []
@@ -50,6 +61,8 @@ def _serialize_multi(values: Any) -> str | None:
 
 def _normalize_db_row(row: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(row)
+    normalized["favourited"] = _normalize_bool(normalized.get("favourited"))
+    normalized["read"] = _normalize_bool(normalized.get("read"))
     normalized["official_sentiment"] = _normalize_input_sentiment(
         normalized.get("official_sentiment")
     )
