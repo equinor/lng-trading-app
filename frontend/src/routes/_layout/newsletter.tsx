@@ -8,6 +8,7 @@ import { Bookmark, Check, Clock, ExternalLink, Filter, Search } from "lucide-rea
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -16,6 +17,7 @@ import {
   isImportantStory,
   patchFavourite,
   patchClassification,
+  patchRead,
   patchSentiment,
   type DbNewsRow,
   type DbSentiment,
@@ -25,6 +27,7 @@ import {
 // Types
 // ------------------------------------------------------
 type FavFilter = "All" | "Favourites" | "NotFavourites"
+type ReadFilter = "All" | "Read" | "Unread"
 
 // ------------------------------------------------------
 // Constants
@@ -162,6 +165,7 @@ function Newsletter() {
 
   // Filters
   const [favFilter, setFavFilter] = useState<FavFilter>("All")
+  const [readFilter, setReadFilter] = useState<ReadFilter>("All")
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]) // [] = all
   const [regionFilter, setRegionFilter] = useState<string[]>([]) // [] = all
   const [dateFrom, setDateFrom] = useState("") // YYYY-MM-DD
@@ -230,6 +234,15 @@ function Newsletter() {
     },
   })
 
+  const readMutation = useMutation({
+    mutationFn: (p: { id: number; read: boolean }) => patchRead(p.id, p.read),
+    onSuccess: async (updatedArticle) => {
+      qc.setQueryData<DbNewsRow[]>(["newsletter", "news"], (current) =>
+        mergePatchedArticle(current, updatedArticle),
+      )
+    },
+  })
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     let rows = [...normalized]
@@ -237,6 +250,10 @@ function Newsletter() {
     // Favourites tri-state
     if (favFilter === "Favourites") rows = rows.filter((x) => x.favourited)
     if (favFilter === "NotFavourites") rows = rows.filter((x) => !x.favourited)
+
+    // Read tri-state
+    if (readFilter === "Read") rows = rows.filter((x) => x.read)
+    if (readFilter === "Unread") rows = rows.filter((x) => !x.read)
 
     // Category multi-select
     if (categoryFilter.length > 0) {
@@ -293,7 +310,7 @@ function Newsletter() {
       return +new Date(b.rtpTimestamp ?? 0) - +new Date(a.rtpTimestamp ?? 0)
     })
     return rows
-  }, [normalized, query, favFilter, categoryFilter, regionFilter, sentiment, dateFrom, dateTo])
+  }, [normalized, query, favFilter, readFilter, categoryFilter, regionFilter, sentiment, dateFrom, dateTo])
 
   const feed = useMemo(() => filtered.slice(0, 40), [filtered])
 
@@ -334,6 +351,18 @@ function Newsletter() {
                 <SelectItem value="All">All</SelectItem>
                 <SelectItem value="Favourites">Favourites</SelectItem>
                 <SelectItem value="NotFavourites">No favourites</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Read status */}
+            <Select value={readFilter} onValueChange={(v) => setReadFilter(v as ReadFilter)}>
+              <SelectTrigger className="h-9 w-[160px]">
+                <SelectValue placeholder="Read status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All</SelectItem>
+                <SelectItem value="Read">Read</SelectItem>
+                <SelectItem value="Unread">Unread</SelectItem>
               </SelectContent>
             </Select>
 
@@ -388,6 +417,7 @@ function Newsletter() {
                 setQuery("")
                 setSentiment("All")
                 setFavFilter("All")
+                setReadFilter("All")
                 setCategoryFilter([])
                 setRegionFilter([])
                 setDateFrom("")
@@ -445,7 +475,7 @@ function Newsletter() {
                 <div className="divide-y">
                   {feed.map((n) => (
                     <article key={n.id} className="py-4">
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-2">
                         <div className="min-w-0 space-y-2">
                           {/* Meta row */}
                           <div className="flex flex-wrap items-center gap-2">
@@ -499,79 +529,10 @@ function Newsletter() {
                             </div>
                           )}
 
-                          {/* Analyst controls */}
-                          <div className="flex flex-wrap items-center gap-2 pt-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={n.favourited ? "default" : "secondary"}
-                              onClick={() => {
-                                if (favouriteMutation.isPending) return
-                                favouriteMutation.mutate({
-                                  id: n.id,
-                                  favourited: !n.favourited,
-                                })
-                              }}
-                            >
-                              <Bookmark className="h-4 w-4 mr-2" />
-                              {n.favourited ? "Favourited" : "Favourite"}
-                            </Button>
-
-                            {/* sentiment toggles (NOTE: clearing won't work until backend accepts null) */}
-                            <div className="inline-flex items-center gap-1">
-                              {(["bullish", "neutral", "bearish"] as const).map((s) => {
-                                const active = n.official_sentiment === s
-                                return (
-                                  <Button
-                                    key={s}
-                                    type="button"
-                                    size="sm"
-                                    variant={active ? "default" : "secondary"}
-                                    onClick={() => {
-                                      if (sentimentMutation.isPending) return
-                                      sentimentMutation.mutate({
-                                        id: n.id,
-                                        official_sentiment: active ? null : s,
-                                      })
-                                    }}
-                                  >
-                                    {formatSentimentLabel(s)}
-                                    {active && <Check className="h-4 w-4 ml-2" />}
-                                  </Button>
-                                )
-                              })}
-                            </div>
-
-                            <CategoryPicker
-                              allCategories={categoryUniverse}
-                              current={n.category_norm}
-                              onApply={(next) => {
-                                if (classificationMutation.isPending) return
-                                classificationMutation.mutate({
-                                  id: n.id,
-                                  category: next,
-                                  region: n.region_norm,
-                                })
-                              }}
-                            />
-
-                            <RegionPicker
-                              options={regionUniverse}
-                              value={n.region_norm}
-                              onChange={(nextRegion) => {
-                                if (classificationMutation.isPending) return
-                                classificationMutation.mutate({
-                                  id: n.id,
-                                  category: n.category_norm,
-                                  region: nextRegion,
-                                })
-                              }}
-                            />
-                          </div>
                         </div>
 
                         {/* Open */}
-                        <div className="flex shrink-0 items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-2 self-start">
                           <Button
                             type="button"
                             variant="ghost"
@@ -592,6 +553,92 @@ function Newsletter() {
                           >
                             <ExternalLink className="h-4 w-4" />
                           </Button>
+                        </div>
+
+                        {/* Analyst controls */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={n.favourited ? "default" : "secondary"}
+                            onClick={() => {
+                              if (favouriteMutation.isPending) return
+                              favouriteMutation.mutate({
+                                id: n.id,
+                                favourited: !n.favourited,
+                              })
+                            }}
+                          >
+                            <Bookmark className="h-4 w-4 mr-2" />
+                            {n.favourited ? "Favourited" : "Favourite"}
+                          </Button>
+
+                          {/* sentiment toggles (NOTE: clearing won't work until backend accepts null) */}
+                          <div className="inline-flex items-center gap-1">
+                            {(["bullish", "neutral", "bearish"] as const).map((s) => {
+                              const active = n.official_sentiment === s
+                              return (
+                                <Button
+                                  key={s}
+                                  type="button"
+                                  size="sm"
+                                  variant={active ? "default" : "secondary"}
+                                  onClick={() => {
+                                    if (sentimentMutation.isPending) return
+                                    sentimentMutation.mutate({
+                                      id: n.id,
+                                      official_sentiment: active ? null : s,
+                                    })
+                                  }}
+                                >
+                                  {formatSentimentLabel(s)}
+                                  {active && <Check className="h-4 w-4 ml-2" />}
+                                </Button>
+                              )
+                            })}
+                          </div>
+
+                          <CategoryPicker
+                            allCategories={categoryUniverse}
+                            current={n.category_norm}
+                            onApply={(next) => {
+                              if (classificationMutation.isPending) return
+                              classificationMutation.mutate({
+                                id: n.id,
+                                category: next,
+                                region: n.region_norm,
+                              })
+                            }}
+                          />
+
+                          <RegionPicker
+                            options={regionUniverse}
+                            value={n.region_norm}
+                            onChange={(nextRegion) => {
+                              if (classificationMutation.isPending) return
+                              classificationMutation.mutate({
+                                id: n.id,
+                                category: n.category_norm,
+                                region: nextRegion,
+                              })
+                            }}
+                          />
+                        </div>
+
+                        <div className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground self-start justify-self-end">
+                          <span className="whitespace-nowrap">{n.read ? "Read" : "Unread"}</span>
+                          <Checkbox
+                            checked={n.read}
+                            disabled={readMutation.isPending}
+                            onCheckedChange={(checked) => {
+                              if (readMutation.isPending) return
+                              readMutation.mutate({
+                                id: n.id,
+                                read: checked === true,
+                              })
+                            }}
+                            aria-label="Toggle read status"
+                          />
                         </div>
                       </div>
                     </article>

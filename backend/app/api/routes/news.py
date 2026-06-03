@@ -8,6 +8,7 @@ from app.schemas.news import (
     NewsListResponse,
     SetClassificationBody,
     SetFavouriteBody,
+    SetReadBody,
     SetSentimentBody,
 )
 from app.services import news_repo
@@ -55,6 +56,13 @@ def _bg_update(article_id: int, kwargs: dict) -> None:
 def set_favourite(article_id: int, body: SetFavouriteBody, bg: BackgroundTasks):
     optimistic: dict = {"id": article_id, "favourited": body.favourited}
     bg.add_task(_bg_update, article_id, {"favourited": body.favourited})
+    return {"ok": True, "data": optimistic}
+
+
+@router.patch("/{article_id}/read")
+def set_read(article_id: int, body: SetReadBody, bg: BackgroundTasks):
+    optimistic: dict = {"id": article_id, "read": body.read}
+    bg.add_task(_bg_update, article_id, {"read": body.read})
     return {"ok": True, "data": optimistic}
 
 

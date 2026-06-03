@@ -54,6 +54,14 @@ export async function patchFavourite(articleId: number, favourited: boolean) {
   return res.data
 }
 
+export async function patchRead(articleId: number, read: boolean) {
+  const res = await apiRequest<NewsPatchResponse>(`${NEWS_BASE}${encodeURIComponent(String(articleId))}/read`, {
+    method: "PATCH",
+    body: { read },
+  })
+  return res.data
+}
+
 export async function patchSentiment(articleId: number, official_sentiment: DbSentiment) {
   const res = await apiRequest<NewsPatchResponse>(`${NEWS_BASE}${encodeURIComponent(String(articleId))}/sentiment`, {
     method: "PATCH",

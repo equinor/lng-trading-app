@@ -33,6 +33,9 @@ class NewsListResponse(BaseModel):
 class SetFavouriteBody(BaseModel):
     favourited: bool
 
+class SetReadBody(BaseModel):
+    read: bool
+
 
 class SetSentimentBody(BaseModel):
     official_sentiment: Sentiment | None = None
