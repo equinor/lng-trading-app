@@ -74,6 +74,7 @@ def update_article(
     article_id: int,
     *,
     favourited: Any = _UNSET,
+    read: Any = _UNSET,
     official_sentiment: Any = _UNSET,
     category: Any = _UNSET,
     region: Any = _UNSET,
@@ -82,10 +83,14 @@ def update_article(
     normalized_official_sentiment: Any = _UNSET
     normalized_region: Any = _UNSET
     normalized_favourited: Any = _UNSET
+    normalized_read: Any = _UNSET
     normalized_category: Any = _UNSET
 
     if favourited is not _UNSET:
         normalized_favourited = bool(favourited)
+
+    if read is not _UNSET:
+        normalized_read = bool(read)
 
     if official_sentiment is not _UNSET:
         normalized_official_sentiment = _normalize_input_sentiment(official_sentiment)
@@ -98,6 +103,7 @@ def update_article(
 
     if (
         normalized_favourited is _UNSET
+        and normalized_read is _UNSET
         and normalized_official_sentiment is _UNSET
         and normalized_category is _UNSET
         and normalized_region is _UNSET
@@ -107,6 +113,7 @@ def update_article(
     changed = NewsStateDatabricksClient.update_row(
         article_id,
         favourited=normalized_favourited,
+        read=normalized_read,
         official_sentiment=normalized_official_sentiment,
         category=normalized_category,
         region=normalized_region,
@@ -119,6 +126,9 @@ def update_article(
 
     if normalized_favourited is not _UNSET:
         updated["favourited"] = normalized_favourited
+
+    if normalized_read is not _UNSET:
+        updated["read"] = normalized_read
 
     if normalized_official_sentiment is not _UNSET:
         updated["official_sentiment"] = normalized_official_sentiment

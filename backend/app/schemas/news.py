@@ -17,6 +17,7 @@ class NewsItem(BaseModel):
     body: str | None = None
     official_sentiment: Sentiment | None = None
     favourited: bool | None = None
+    read: bool | None = None
     source: str | None = None
     updatedDate: datetime | None = None
     rtpTimestamp: datetime | None = None

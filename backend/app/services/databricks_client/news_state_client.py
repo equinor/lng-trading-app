@@ -31,6 +31,7 @@ class NewsStateDatabricksClient:
                 `body` AS body,
                 `official_sentiment` AS official_sentiment,
                 `favourited` AS favourited,
+                `read` AS read,
                 `source` AS source,
                 `updatedDate` AS updatedDate,
                 `rtpTimestamp` AS rtpTimestamp,
@@ -58,6 +59,7 @@ class NewsStateDatabricksClient:
                 `body` AS body,
                 `official_sentiment` AS official_sentiment,
                 `favourited` AS favourited,
+                `read` AS read,
                 `source` AS source,
                 `updatedDate` AS updatedDate,
                 `rtpTimestamp` AS rtpTimestamp,
@@ -76,6 +78,7 @@ class NewsStateDatabricksClient:
         article_id: int,
         *,
         favourited: Any = UNSET,
+        read: Any = UNSET,
         official_sentiment: Any = UNSET,
         category: Any = UNSET,
         region: Any = UNSET,
@@ -86,6 +89,10 @@ class NewsStateDatabricksClient:
         if favourited is not UNSET:
             assignments.append("`favourited` = ?")
             params.append(bool(favourited))
+
+        if read is not UNSET:
+            assignments.append("`read` = ?")
+            params.append(bool(read))
 
         if official_sentiment is not UNSET:
             assignments.append("`official_sentiment` = ?")

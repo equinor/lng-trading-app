@@ -14,6 +14,7 @@ export type DbNewsRow = {
   headline: string
   body: string | null
   favourited: boolean
+  read: boolean
   official_sentiment: DbSentiment
   source: string | null
   updatedDate: string | null

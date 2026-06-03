@@ -59,6 +59,7 @@ def seed_if_empty() -> None:
             "body": "Mock content preview...",
             "official_sentiment": None,
             "favourited": False,
+            "read": False,
             "source": settings.MOCK_NEWS_SOURCE,
             "updatedDate": now,
             "rtpTimestamp": now,
@@ -100,6 +101,7 @@ def update_article(
     article_id: int,
     *,
     favourited: Any = _UNSET,
+    read: Any = _UNSET,
     official_sentiment: Any = _UNSET,
     category: Any = _UNSET,
     region: Any = _UNSET,
@@ -109,6 +111,9 @@ def update_article(
 
     if favourited is not _UNSET:
         row["favourited"] = bool(favourited)
+
+    if read is not _UNSET:
+        row["read"] = bool(read)
 
     if official_sentiment is not _UNSET:
         row["official_sentiment"] = None if official_sentiment is None else str(official_sentiment)
