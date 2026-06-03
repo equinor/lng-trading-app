@@ -1,7 +1,7 @@
 // frontend/src/routes/_layout/news_summary.tsx
-import { Suspense, useMemo } from "react"
+import { useMemo } from "react"
 import { createFileRoute } from "@tanstack/react-router"
-import { useSuspenseQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { ExternalLink } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -41,6 +41,7 @@ function getFavouritedNewsQueryOptions() {
   return {
     queryKey: ["news_summary", "favourited"],
     queryFn: () => getNews(500, true),
+    refetchOnMount: "always" as const,
   }
 }
 
@@ -114,15 +115,12 @@ function PendingNewsSummary() {
 }
 
 function NewsSummaryRoute() {
-  return (
-    <Suspense fallback={<PendingNewsSummary />}>
-      <NewsSummary />
-    </Suspense>
-  )
+  return <NewsSummary />
 }
 
 function NewsSummary() {
-  const { data } = useSuspenseQuery(getFavouritedNewsQueryOptions())
+  const newsQuery = useQuery(getFavouritedNewsQueryOptions())
+  const data = newsQuery.data
 
   const grouped = useMemo<GroupedRows>(() => {
     const fav = (data ?? []).filter((x) => x.favourited)
@@ -149,6 +147,20 @@ function NewsSummary() {
   }, [data])
 
   const dominant = useMemo(() => getDominantSentiment(grouped), [grouped])
+
+  // Prevent outdated cached content from flashing before a fresh GET returns.
+  if (!newsQuery.isFetchedAfterMount) {
+    return <PendingNewsSummary />
+  }
+
+  if (newsQuery.isError) {
+    return (
+      <div className="flex h-[calc(100vh-170px)] items-center justify-center text-sm text-muted-foreground">
+        Failed to load news summary.
+      </div>
+    )
+  }
+
   const keys: SentimentKey[] = ["bullish", "bearish", "neutral"]
 
   return (
