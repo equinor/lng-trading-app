@@ -1,233 +1,198 @@
-# Full Stack FastAPI Template
+# LNG Views — News Analytics for LNG Markets
 
-<a href="https://github.com/fastapi/full-stack-fastapi-template/actions?query=workflow%3A%22Test+Docker+Compose%22" target="_blank"><img src="https://github.com/fastapi/full-stack-fastapi-template/workflows/Test%20Docker%20Compose/badge.svg" alt="Test Docker Compose"></a>
-<a href="https://github.com/fastapi/full-stack-fastapi-template/actions?query=workflow%3A%22Test+Backend%22" target="_blank"><img src="https://github.com/fastapi/full-stack-fastapi-template/workflows/Test%20Backend/badge.svg" alt="Test Backend"></a>
-<a href="https://coverage-badge.samuelcolvin.workers.dev/redirect/fastapi/full-stack-fastapi-template" target="_blank"><img src="https://coverage-badge.samuelcolvin.workers.dev/fastapi/full-stack-fastapi-template.svg" alt="Coverage"></a>
+LNG news curation and sentiment analytics dashboard. Built with React + TypeScript (frontend) and FastAPI + Python (backend), backed by Databricks SQL and deployed on Radix.
 
-## Technology Stack and Features
+## Prerequisites
 
-- ⚡ [**FastAPI**](https://fastapi.tiangolo.com) for the Python backend API.
-  - 🧰 [SQLModel](https://sqlmodel.tiangolo.com) for the Python SQL database interactions (ORM).
-  - 🔍 [Pydantic](https://docs.pydantic.dev), used by FastAPI, for the data validation and settings management.
-  - 💾 [PostgreSQL](https://www.postgresql.org) as the SQL database.
-- 🚀 [React](https://react.dev) for the frontend.
-  - 💃 Using TypeScript, hooks, [Vite](https://vitejs.dev), and other parts of a modern frontend stack.
-  - 🎨 [Tailwind CSS](https://tailwindcss.com) and [shadcn/ui](https://ui.shadcn.com) for the frontend components.
-  - 🤖 An automatically generated frontend client.
-  - 🧪 [Playwright](https://playwright.dev) for End-to-End testing.
-  - 🦇 Dark mode support.
-- 🐋 [Docker Compose](https://www.docker.com) for development and production.
-- 🔒 Secure password hashing by default.
-- 🔑 JWT (JSON Web Token) authentication.
-- 📫 Email based password recovery.
-- 📬 [Mailcatcher](https://mailcatcher.me) for local email testing during development.
-- ✅ Tests with [Pytest](https://pytest.org).
-- 📞 [Traefik](https://traefik.io) as a reverse proxy / load balancer.
-- 🚢 Deployment instructions using Docker Compose, including how to set up a frontend Traefik proxy to handle automatic HTTPS certificates.
-- 🏭 CI (continuous integration) and CD (continuous deployment) based on GitHub Actions.
+- Docker Desktop (includes Docker Compose)
+- Access to the Databricks workspace `gplng-plab-dbw` to retrieve the service principal credentials (or use mock mode)
 
-### Dashboard Login
+## Running Locally
 
-[![API docs](img/login.png)](https://github.com/fastapi/full-stack-fastapi-template)
+### 1. Configure environment variables
 
-### Dashboard - Admin
-
-[![API docs](img/dashboard.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-### Dashboard - Items
-
-[![API docs](img/dashboard-items.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-### Dashboard - Dark Mode
-
-[![API docs](img/dashboard-dark.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-### Interactive API Documentation
-
-[![API docs](img/docs.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-## How To Use It
-
-You can **just fork or clone** this repository and use it as is.
-
-✨ It just works. ✨
-
-### How to Use a Private Repository
-
-If you want to have a private repository, GitHub won't allow you to simply fork it as it doesn't allow changing the visibility of forks.
-
-But you can do the following:
-
-- Create a new GitHub repo, for example `my-full-stack`.
-- Clone this repository manually, set the name with the name of the project you want to use, for example `my-full-stack`:
+Copy the example env file at the repository root:
 
 ```bash
-git clone git@github.com:fastapi/full-stack-fastapi-template.git my-full-stack
+cp .env.example .env
 ```
 
-- Enter into the new directory:
+Open `.env` and configure the Databricks connection:
+
+```dotenv
+# Switch between "databricks" (real data) or "mock" (fake seed data for UI work)
+NEWS_BACKEND=databricks
+
+# Databricks SQL Warehouse connection
+DATABRICKS_SERVER_HOSTNAME=adb-XXXX.7.azuredatabricks.net
+DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/<warehouse-id>
+
+# Service Principal auth
+DATABRICKS_USE_SERVICE_PRINCIPAL=true
+DATABRICKS_TENANT_ID=<tenant-id>
+DATABRICKS_CLIENT_ID=<client-id>
+DATABRICKS_CLIENT_SECRET=<client-secret>
+DATABRICKS_WORKSPACE_RESOURCE_ID=<full-resource-id>
+```
+
+> **Tip:** If you only need to work on UI/frontend changes and don't need real data, set `NEWS_BACKEND=mock`. The app will start with 12 fake seeded articles — no Databricks credentials needed.
+
+### 2. Start all services
+
+From the repository root:
 
 ```bash
-cd my-full-stack
+docker compose watch
 ```
 
-- Set the new origin to your new repository, copy it from the GitHub interface, for example:
+This starts the following containers:
+
+| Container | Exposed at |
+|-----------|-----------|
+| frontend (React + Vite + nginx) | http://localhost:5173 |
+| backend (FastAPI) | http://localhost:8000 |
+| db (PostgreSQL) | localhost:5432 |
+| adminer (DB admin UI) | http://localhost:8080 |
+| mailcatcher (local email) | http://localhost:1080 |
+
+### 3. Open the app
+
+http://localhost:5173
+
+### Subsequent starts
+
+Once the images are built, a plain `docker compose watch` will pick up file changes automatically via Docker watch mode (hot-reload for both frontend and backend).
+
+To restart without watch mode:
 
 ```bash
-git remote set-url origin git@github.com:octocat/my-full-stack.git
+docker compose up
 ```
 
-- Add this repo as another "remote" to allow you to get updates later:
+### Tear down
 
 ```bash
-git remote add upstream git@github.com:fastapi/full-stack-fastapi-template.git
+docker compose down
 ```
 
-- Push the code to your new repository:
+To also remove the named volumes (database data):
 
 ```bash
-git push -u origin master
+docker compose down -v
 ```
 
-### Update From the Original Template
+## Local Development (without Docker)
 
-After cloning the repository, and after doing changes, you might want to get the latest changes from this original template.
+You can stop individual Docker services and run them locally instead:
 
-- Make sure you added the original repository as a remote, you can check it with:
-
+**Frontend:**
 ```bash
-git remote -v
-
-origin    git@github.com:octocat/my-full-stack.git (fetch)
-origin    git@github.com:octocat/my-full-stack.git (push)
-upstream    git@github.com:fastapi/full-stack-fastapi-template.git (fetch)
-upstream    git@github.com:fastapi/full-stack-fastapi-template.git (push)
+docker compose stop frontend
+cd frontend
+bun install
+bun run dev
 ```
 
-- Pull the latest changes without merging:
-
+**Backend:**
 ```bash
-git pull --no-commit upstream master
+docker compose stop backend
+cd backend
+fastapi dev app/main.py
 ```
 
-This will download the latest changes from this template without committing them, that way you can check everything is right before committing.
+Both use the same ports as their Docker counterparts, so everything keeps working seamlessly.
 
-- If there are conflicts, solve them in your editor.
+## Project Structure
 
-- Once you are done, commit the changes:
-
-```bash
-git merge --continue
+```
+lng-views/
+├── backend/                    # FastAPI application
+│   ├── app/
+│   │   ├── main.py             # Entry point, middleware, router registration
+│   │   ├── api/routes/         # HTTP endpoints (news CRUD)
+│   │   ├── services/           # Business logic: Databricks client, mock service
+│   │   │   ├── news_repo.py              # Repository interface (dispatches to backend)
+│   │   │   ├── news_repo_databricks.py   # Databricks SQL implementation
+│   │   │   ├── normalization.py          # Shared data normalization utilities
+│   │   │   ├── mock/                     # In-memory mock for local development
+│   │   │   └── databricks_client/        # Low-level Databricks SQL connector
+│   │   ├── core/
+│   │   │   ├── config.py        # All configuration (loaded from .env)
+│   │   │   ├── databricks.py    # Databricks connection manager
+│   │   │   └── security.py     # JWT / password hashing
+│   │   └── schemas/            # Pydantic request/response models
+│   ├── tests/                  # Pytest test suite
+│   └── Dockerfile
+├── frontend/                   # React + TypeScript application
+│   ├── src/
+│   │   ├── main.tsx            # App entry point
+│   │   ├── routes/             # TanStack Router file-based routes
+│   │   │   └── _layout/
+│   │   │       ├── newsletter.tsx      # Main news feed with analyst controls
+│   │   │       └── news_summary.tsx    # Favourited news summary dashboard
+│   │   ├── components/         # UI components (shadcn/ui based)
+│   │   ├── services/           # API client and news service modules
+│   │   │   └── news/
+│   │   │       ├── news_api.ts   # API functions (getNews, patch*)
+│   │   │       └── news_utils.ts # Shared helpers (formatTime, cleanTagValue, etc.)
+│   │   └── lib/utils.ts        # Tailwind merge + formatHtmlText
+│   ├── nginx.conf              # Production nginx config
+│   └── Dockerfile
+├── compose.yml                 # Base Docker Compose config
+├── compose.override.yml        # Local dev overrides (ports, hot-reload, mailcatcher)
+├── compose.traefik.yml         # Traefik proxy config for subdomain routing
+├── radixconfig.yaml            # Radix (Equinor PaaS) deployment config
+└── .env                        # ⚠ Local secrets — gitignored, never commit
 ```
 
-### Configure
+## Environment Variables Reference
 
-You can then update configs in the `.env` files to customize your configurations.
+### Required locally (for Databricks mode)
 
-Before deploying it, make sure you change at least the values for:
+| Variable | Description |
+|----------|-------------|
+| `DATABRICKS_SERVER_HOSTNAME` | Databricks workspace hostname |
+| `DATABRICKS_HTTP_PATH` | SQL Warehouse HTTP path |
+| `DATABRICKS_USE_SERVICE_PRINCIPAL` | Set to `true` |
+| `DATABRICKS_TENANT_ID` | Azure AD tenant ID |
+| `DATABRICKS_CLIENT_ID` | Service principal client ID |
+| `DATABRICKS_CLIENT_SECRET` | Service principal client secret |
+| `DATABRICKS_WORKSPACE_RESOURCE_ID` | Full Azure resource ID for the workspace |
 
-- `SECRET_KEY`
-- `FIRST_SUPERUSER_PASSWORD`
-- `POSTGRES_PASSWORD`
+### Optional / pre-filled
 
-You can (and should) pass these as environment variables from secrets.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NEWS_BACKEND` | `mock` | `databricks` for real data, `mock` for fake seed |
+| `NEWS_TABLE` | `lng_apac.news_state` | Unity Catalog table name |
+| `MOCK_NEWS_SEED_COUNT` | `12` | Number of mock articles to seed |
+| `SECRET_KEY` | random | JWT signing key |
+| `BACKEND_CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
+| `FIRST_SUPERUSER` | `admin@example.com` | Default admin user email |
+| `FIRST_SUPERUSER_PASSWORD` | `changethis` | Default admin password |
 
-Read the [deployment.md](./deployment.md) docs for more details.
+### Not needed locally
 
-### Generate Secret Keys
-
-Some environment variables in the `.env` file have a default value of `changethis`.
-
-You have to change them with a secret key, to generate secret keys you can run the following command:
-
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
-
-Copy the content and use that as password / secret key. And run that again to generate another secure key.
-
-## How To Use It - Alternative With Copier
-
-This repository also supports generating a new project using [Copier](https://copier.readthedocs.io).
-
-It will copy all the files, ask you configuration questions, and update the `.env` files with your answers.
-
-### Install Copier
-
-You can install Copier with:
-
-```bash
-pip install copier
-```
-
-Or better, if you have [`pipx`](https://pipx.pypa.io/), you can run it with:
-
-```bash
-pipx install copier
-```
-
-**Note**: If you have `pipx`, installing copier is optional, you could run it directly.
-
-### Generate a Project With Copier
-
-Decide a name for your new project's directory, you will use it below. For example, `my-awesome-project`.
-
-Go to the directory that will be the parent of your project, and run the command with your project's name:
-
-```bash
-copier copy https://github.com/fastapi/full-stack-fastapi-template my-awesome-project --trust
-```
-
-If you have `pipx` and you didn't install `copier`, you can run it directly:
-
-```bash
-pipx run copier copy https://github.com/fastapi/full-stack-fastapi-template my-awesome-project --trust
-```
-
-**Note** the `--trust` option is necessary to be able to execute a [post-creation script](https://github.com/fastapi/full-stack-fastapi-template/blob/master/.copier/update_dotenv.py) that updates your `.env` files.
-
-### Input Variables
-
-Copier will ask you for some data, you might want to have at hand before generating the project.
-
-But don't worry, you can just update any of that in the `.env` files afterwards.
-
-The input variables, with their default values (some auto generated) are:
-
-- `project_name`: (default: `"FastAPI Project"`) The name of the project, shown to API users (in .env).
-- `stack_name`: (default: `"fastapi-project"`) The name of the stack used for Docker Compose labels and project name (no spaces, no periods) (in .env).
-- `secret_key`: (default: `"changethis"`) The secret key for the project, used for security, stored in .env, you can generate one with the method above.
-- `first_superuser`: (default: `"admin@example.com"`) The email of the first superuser (in .env).
-- `first_superuser_password`: (default: `"changethis"`) The password of the first superuser (in .env).
-- `smtp_host`: (default: "") The SMTP server host to send emails, you can set it later in .env.
-- `smtp_user`: (default: "") The SMTP server user to send emails, you can set it later in .env.
-- `smtp_password`: (default: "") The SMTP server password to send emails, you can set it later in .env.
-- `emails_from_email`: (default: `"info@example.com"`) The email account to send emails from, you can set it later in .env.
-- `postgres_password`: (default: `"changethis"`) The password for the PostgreSQL database, stored in .env, you can generate one with the method above.
-- `sentry_dsn`: (default: "") The DSN for Sentry, if you are using it, you can set it later in .env.
-
-## Backend Development
-
-Backend docs: [backend/README.md](./backend/README.md).
-
-## Frontend Development
-
-Frontend docs: [frontend/README.md](./frontend/README.md).
+| Variable | Why not needed |
+|----------|---------------|
+| `SENTRY_DSN` | Error tracking — only for staging/production |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` | Mailcatcher handles email locally |
 
 ## Deployment
 
-Deployment docs: [deployment.md](./deployment.md).
+The app deploys on [Radix](https://www.radix.equinor.com/) (Equinor's PaaS). Configuration is in `radixconfig.yaml`.
 
-## Development
+| Environment | Branch | Frontend |
+|-------------|--------|----------|
+| dev | `main` | Auth bypassed (`VITE_BYPASS_AUTH=true`) |
+| prod | `release` | Full auth enabled |
 
-General development docs: [development.md](./development.md).
+The backend reads `NEWS_BACKEND=databricks` and Databricks credentials from Radix secrets.
 
-This includes using Docker Compose, custom local domains, `.env` configurations, etc.
+## Tech Stack
 
-## Release Notes
-
-Check the file [release-notes.md](./release-notes.md).
-
-## License
-
-The Full Stack FastAPI Template is licensed under the terms of the MIT license.
+- **Frontend:** React 19, TypeScript, Vite, TanStack Router, TanStack React Query, Tailwind CSS v4, shadcn/ui
+- **Backend:** FastAPI, Python 3.12+, Pydantic, Databricks SQL Connector
+- **Database:** PostgreSQL (user accounts), Databricks Unity Catalog (news data)
+- **Infrastructure:** Docker Compose (local), Radix (deployment), Traefik (proxy)
+- **Testing:** Pytest (backend), Playwright (E2E)
