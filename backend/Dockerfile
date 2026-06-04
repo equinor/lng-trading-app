@@ -42,4 +42,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 WORKDIR /app/backend/
 
+RUN adduser --disabled-password --gecos "" --uid 1001 appuser \
+    && chown -R appuser:appuser /app
+USER 1001
+
 CMD ["fastapi", "run", "--workers", "4", "app/main.py"]

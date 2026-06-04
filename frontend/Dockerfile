@@ -18,7 +18,7 @@ RUN bun run build
 
 
 # Stage 1, based on Nginx, to have only the compiled app, ready for production with Nginx
-FROM nginx:1
+FROM nginxinc/nginx-unprivileged:1
 
 COPY --from=build-stage /app/frontend/dist/ /usr/share/nginx/html
 
