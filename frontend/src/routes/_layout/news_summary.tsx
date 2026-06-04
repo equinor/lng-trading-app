@@ -113,10 +113,10 @@ function panelBadgeVariant(key: SentimentKey): "default" | "destructive" | "seco
   return "secondary"
 }
 
-function panelAccentColor(key: SentimentKey) {
-  if (key === "bullish") return "#00A651"
-  if (key === "bearish") return "#D7261E"
-  return "#0070C0"
+function panelAccentClass(key: SentimentKey) {
+  if (key === "bullish") return "text-green-700 dark:text-green-400"
+  if (key === "bearish") return "text-red-700 dark:text-red-400"
+  return "text-blue-700 dark:text-blue-400"
 }
 
 function panelEmptyText(key: SentimentKey) {
@@ -243,7 +243,7 @@ function NewsSummary() {
   return (
     <div className="flex flex-col gap-4" style={{ fontFamily: "Inter, sans-serif" }}>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-lg font-bold tracking-tight" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>News Summary</h1>
+        <h1 className="text-lg font-bold tracking-tight" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>LNG market news / sentiment </h1>
         <div className="flex items-center gap-2">
           <Input
             type="date"
@@ -305,8 +305,8 @@ function SentimentPanel(props: {
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <CardTitle
-            className="text-base"
-            style={{ fontFamily: "Equinor, Inter, sans-serif", color: panelAccentColor(props.title.toLowerCase() as SentimentKey) }}
+            className={`text-base ${panelAccentClass(props.title.toLowerCase() as SentimentKey)}`}
+            style={{ fontFamily: "Equinor, Inter, sans-serif" }}
           >
             {props.title}
           </CardTitle>

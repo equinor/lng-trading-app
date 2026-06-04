@@ -478,10 +478,10 @@ function Newsletter() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-3">
                 <CardTitle className="text-base">Live Feed</CardTitle>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {/* <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock className="h-4 w-4" />
                   From backend (mock now, Databricks later)
-                </div>
+                </div> */}
               </div>
             </CardHeader>
 
