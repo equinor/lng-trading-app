@@ -14,8 +14,8 @@ spec:
         from: release
   components:
     - name: backend
-      src: backend
-      dockerfileName: Dockerfile
+      src: "."
+      dockerfileName: backend/Dockerfile
       ports:
         - name: http
           port: 8000
@@ -41,8 +41,8 @@ spec:
           periodSeconds: 10
 
     - name: frontend
-      src: frontend
-      dockerfileName: Dockerfile
+      src: "."
+      dockerfileName: frontend/Dockerfile
       ports:
         - name: http
           port: 8080
