@@ -96,7 +96,7 @@ services:
   frontend:
     restart: "no"
     ports:
-      - "5173:80"
+      - "5173:8080"
     build:
       context: .
       dockerfile: frontend/Dockerfile
