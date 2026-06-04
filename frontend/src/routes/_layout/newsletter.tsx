@@ -98,7 +98,7 @@ function mergePatchedArticle(
 // ------------------------------------------------------
 export const Route = createFileRoute("/_layout/newsletter")({
   component: NewsletterRoute,
-  head: () => ({ meta: [{ title: "Newsletter - LNG Views" }] }),
+  head: () => ({ meta: [{ title: "Newsletter - LNG Trading App" }] }),
 })
 
 function PendingNewsletter() {

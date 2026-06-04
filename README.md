@@ -1,4 +1,4 @@
-# LNG Views — News Analytics for LNG Markets
+# LNG Trading App — News Analytics for LNG Markets
 
 LNG news curation and sentiment analytics dashboard. Built with React + TypeScript (frontend) and FastAPI + Python (backend), backed by Databricks SQL and deployed on Radix.
 
@@ -105,7 +105,7 @@ Both use the same ports as their Docker counterparts, so everything keeps workin
 ## Project Structure
 
 ```
-lng-views/
+lng-trading-app/
 ├── backend/                    # FastAPI application
 │   ├── app/
 │   │   ├── main.py             # Entry point, middleware, router registration

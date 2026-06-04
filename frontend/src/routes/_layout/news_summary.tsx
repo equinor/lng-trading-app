@@ -87,7 +87,7 @@ function panelEmptyText(key: SentimentKey) {
 export const Route = createFileRoute("/_layout/news_summary")({
   component: NewsSummaryRoute,
   head: () => ({
-    meta: [{ title: "News Summary - LNG Views" }],
+    meta: [{ title: "News Summary - LNG Trading App" }],
   }),
 })
 

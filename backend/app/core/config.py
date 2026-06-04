@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # --- app basics ---
     API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "lng-views"
+    PROJECT_NAME: str = "lng-trading-app"
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
 
     # Keep a secret key if anything uses it (cookies/signing later)
