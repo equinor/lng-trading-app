@@ -2,7 +2,7 @@
 
 import logging
 import time
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks
 
 from app.schemas.news import (
     NewsListResponse,
@@ -129,6 +129,7 @@ def _bg_update(article_id: int, kwargs: dict) -> None:
 @router.patch("/{article_id}/favourite")
 def set_favourite(article_id: int, body: SetFavouriteBody, bg: BackgroundTasks):
     optimistic: dict = {"id": article_id, "favourited": body.favourited}
+    _set_pending_override(article_id, {"favourited": body.favourited})
     bg.add_task(_bg_update, article_id, {"favourited": body.favourited})
     return {"ok": True, "data": optimistic}
 
@@ -144,6 +145,7 @@ def set_read(article_id: int, body: SetReadBody, bg: BackgroundTasks):
 @router.patch("/{article_id}/sentiment")
 def set_sentiment(article_id: int, body: SetSentimentBody, bg: BackgroundTasks):
     optimistic: dict = {"id": article_id, "official_sentiment": body.official_sentiment}
+    _set_pending_override(article_id, {"official_sentiment": body.official_sentiment})
     bg.add_task(_bg_update, article_id, {"official_sentiment": body.official_sentiment})
     return {"ok": True, "data": optimistic}
 
@@ -151,5 +153,6 @@ def set_sentiment(article_id: int, body: SetSentimentBody, bg: BackgroundTasks):
 @router.patch("/{article_id}/classification")
 def set_classification(article_id: int, body: SetClassificationBody, bg: BackgroundTasks):
     optimistic: dict = {"id": article_id, "category": body.category, "region": body.region}
+    _set_pending_override(article_id, {"category": body.category, "region": body.region})
     bg.add_task(_bg_update, article_id, {"category": body.category, "region": body.region})
     return {"ok": True, "data": optimistic}

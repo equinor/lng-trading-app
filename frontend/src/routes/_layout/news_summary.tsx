@@ -10,47 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatHtmlText } from "@/lib/utils"
-import { getNews, type DbNewsRow } from "@/services/news/news_api"
+import { getNews, isImportantStory, type DbNewsRow } from "@/services/news/news_api"
+import { formatTime, readTimeMinFromContent, cleanTagValue } from "@/services/news/news_utils"
 
 type SentimentKey = "bullish" | "bearish" | "neutral"
 type RowWithReadTime = DbNewsRow & { readTimeMin: number }
 type GroupedRows = Record<SentimentKey, RowWithReadTime[]>
-
-function formatTime(iso: string | null) {
-  if (!iso) return "—"
-  const d = new Date(iso)
-  if (Number.isNaN(+d)) return "—"
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
-
-function readTimeMinFromContent(content: string | null) {
-  if (!content) return 2
-  const words = content.trim().split(/\s+/).filter(Boolean).length
-  return Math.max(2, Math.min(10, Math.round(words / 220)))
-}
-
-function cleanTagValue(value: unknown) {
-  if (value == null) return ""
-  const text = String(value).trim()
-  if (!text) return ""
-
-  return text
-    .replace(/^\[+/, "")
-    .replace(/\]+$/, "")
-    .replace(/^['\"]+/, "")
-    .replace(/['\"]+$/, "")
-    .trim()
-}
-
-function isImportantStory(value: string | null) {
-  if (!value) return false
-  return ["true", "1", "yes", "y", "important"].includes(value.trim().toLowerCase())
-}
 
 function toBool(value: unknown): boolean {
   if (typeof value === "boolean") return value
@@ -105,12 +70,6 @@ function panelTitle(key: SentimentKey) {
   if (key === "bullish") return "Bullish"
   if (key === "bearish") return "Bearish"
   return "Neutral"
-}
-
-function panelBadgeVariant(key: SentimentKey): "default" | "destructive" | "secondary" {
-  if (key === "bullish") return "default"
-  if (key === "bearish") return "destructive"
-  return "secondary"
 }
 
 function panelAccentClass(key: SentimentKey) {
@@ -278,7 +237,6 @@ function NewsSummary() {
           <div key={key} className={panelLayoutClass(key, dominant)}>
             <SentimentPanel
               title={panelTitle(key)}
-              badgeVariant={panelBadgeVariant(key)}
               rows={grouped[key]}
               emptyText={panelEmptyText(key)}
               isPrimary={key === dominant}
@@ -292,7 +250,6 @@ function NewsSummary() {
 
 function SentimentPanel(props: {
   title: "Bullish" | "Bearish" | "Neutral"
-  badgeVariant: "default" | "destructive" | "secondary"
   rows: RowWithReadTime[]
   emptyText: string
   isPrimary: boolean
@@ -310,19 +267,6 @@ function SentimentPanel(props: {
           >
             {props.title}
           </CardTitle>
-          {/* <div className="flex items-center gap-2">
-            <Badge variant="outline">{props.rows.length}</Badge>
-            <Badge
-              variant={props.badgeVariant}
-              style={{
-                backgroundColor: panelAccentColor(props.title.toLowerCase() as SentimentKey),
-                borderColor: panelAccentColor(props.title.toLowerCase() as SentimentKey),
-                color: "white",
-              }}
-            >
-              {props.title}
-            </Badge>
-          </div> */}
         </div>
       </CardHeader>
 
@@ -336,22 +280,6 @@ function SentimentPanel(props: {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {/* <Badge variant="outline">Favourited</Badge>
-
-                      {n.official_sentiment && (
-                        <Badge
-                          variant={
-                            n.official_sentiment === "bullish"
-                              ? "default"
-                              : n.official_sentiment === "bearish"
-                                ? "destructive"
-                                : "secondary"
-                          }
-                        >
-                          {formatSentimentLabel(n.official_sentiment)}
-                        </Badge>
-                      )} */}
-
                       <span className="text-xs text-muted-foreground wrap-break-word" style={{ fontFamily: "Inter, sans-serif" }}>
                         {n.source} • {formatTime(n.rtpTimestamp)}
                       </span>

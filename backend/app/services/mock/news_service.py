@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import random
 from datetime import datetime, timezone
-from typing import Any
 from uuid import uuid4
 
 from app.core.config import settings
 from app.services.mock.news_constants import NEWS_CATEGORIES, NEWS_REGIONS
+from app.services.normalization import normalize_multi as _normalize_multi
 
 
 def utcnow() -> datetime:
@@ -31,15 +31,6 @@ def pick_region(p_none: float) -> str | None:
     max_count = min(2, len(NEWS_REGIONS))
     count = random.randint(1, max_count)
     return random.sample(NEWS_REGIONS, count)
-
-
-def _normalize_multi(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value).strip()
-    return [text] if text else []
 
 
 def seed_if_empty() -> None:

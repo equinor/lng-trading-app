@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from app.services.databricks_client.news_state_client import (
     UNSET as DBX_UNSET,
     NewsStateDatabricksClient,
 )
+from app.services.normalization import normalize_multi as _normalize_multi
 
 _UNSET = DBX_UNSET
 
@@ -29,27 +29,6 @@ def _normalize_bool(value: Any) -> bool:
         return bool(value)
     text = str(value).strip().lower()
     return text in {"true", "1", "yes", "y", "t"}
-
-
-def _normalize_multi(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-
-    text = str(value).strip()
-    if not text:
-        return []
-
-    if text.startswith("[") and text.endswith("]"):
-        try:
-            loaded = json.loads(text)
-            if isinstance(loaded, list):
-                return [str(item).strip() for item in loaded if str(item).strip()]
-        except json.JSONDecodeError:
-            pass
-
-    return [item.strip() for item in text.split(",") if item.strip()]
 
 
 def _serialize_multi(values: Any) -> str | None:

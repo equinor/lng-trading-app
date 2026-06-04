@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link as RouterLink } from "@tanstack/react-router"
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
-import { Bookmark, Check, Clock, ExternalLink, Filter, Plus, Search } from "lucide-react"
+import { Bookmark, Check, ExternalLink, Filter, Plus, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,6 +23,7 @@ import {
   type DbNewsRow,
   type DbSentiment,
 } from "@/services/news/news_api"
+import { formatTime, readTimeMinFromContent, cleanTagValue } from "@/services/news/news_utils"
 
 // ------------------------------------------------------
 // Types
@@ -52,18 +53,6 @@ const REGIONS = [
 // ------------------------------------------------------
 // Helpers
 // ------------------------------------------------------
-function formatTime(iso: string | null) {
-  if (!iso) return "—"
-  const d = new Date(iso)
-  if (Number.isNaN(+d)) return "—"
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
-
 function startOfDay(d: Date) {
   const x = new Date(d)
   x.setHours(0, 0, 0, 0)
@@ -80,25 +69,6 @@ function parseISO(iso: string | null) {
   if (!iso) return null
   const d = new Date(iso)
   return Number.isNaN(+d) ? null : d
-}
-
-function readTimeMinFromContent(content: string | null) {
-  if (!content) return 2
-  const words = content.trim().split(/\s+/).filter(Boolean).length
-  return Math.max(2, Math.min(10, Math.round(words / 220)))
-}
-
-function cleanTagValue(value: unknown) {
-  if (value == null) return ""
-  const text = String(value).trim()
-  if (!text) return ""
-
-  return text
-    .replace(/^\[+/, "")
-    .replace(/\]+$/, "")
-    .replace(/^['\"]+/, "")
-    .replace(/['\"]+$/, "")
-    .trim()
 }
 
 function formatSentimentLabel(sentiment: DbSentiment) {
@@ -478,10 +448,6 @@ function Newsletter() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-3">
                 <CardTitle className="text-base">Live Feed</CardTitle>
-                {/* <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  From backend (mock now, Databricks later)
-                </div> */}
               </div>
             </CardHeader>
 
