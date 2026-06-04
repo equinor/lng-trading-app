@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link as RouterLink } from "@tanstack/react-router"
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
-import { Bookmark, Check, Clock, ExternalLink, Filter, Search } from "lucide-react"
+import { Bookmark, Check, Clock, ExternalLink, Filter, Plus, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -716,9 +716,15 @@ function CategoryPicker(props: {
 }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<string[]>(props.current)
+  const [adding, setAdding] = useState(false)
+  const [newValue, setNewValue] = useState("")
 
   useEffect(() => {
-    if (!open) setDraft(props.current)
+    if (!open) {
+      setDraft(props.current)
+      setAdding(false)
+      setNewValue("")
+    }
   }, [open, props.current])
 
   const toggle = (value: string) => {
@@ -726,6 +732,15 @@ function CategoryPicker(props: {
       const has = prev.includes(value)
       return has ? prev.filter((x) => x !== value) : [...prev, value]
     })
+  }
+
+  const addCustom = () => {
+    const trimmed = newValue.trim()
+    if (trimmed && !draft.includes(trimmed)) {
+      setDraft((prev) => [...prev, trimmed])
+    }
+    setNewValue("")
+    setAdding(false)
   }
 
   return (
@@ -751,6 +766,44 @@ function CategoryPicker(props: {
                 </Button>
               )
             })}
+            {draft.filter((d) => !props.allCategories.includes(d)).map((custom) => (
+              <Button
+                key={custom}
+                type="button"
+                size="sm"
+                variant="default"
+                onClick={() => toggle(custom)}
+              >
+                {custom}
+              </Button>
+            ))}
+
+            {adding ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  autoFocus
+                  value={newValue}
+                  onChange={(e) => setNewValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addCustom()
+                    if (e.key === "Escape") { setAdding(false); setNewValue("") }
+                  }}
+                  placeholder="New category"
+                  className="h-8 w-32 text-sm"
+                />
+                <Button type="button" size="sm" onClick={addCustom}>Add</Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="border-dashed"
+                onClick={() => setAdding(true)}
+              >
+                <Plus className="h-3 w-3 mr-1" />Add
+              </Button>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
@@ -784,9 +837,15 @@ function RegionPicker(props: {
 }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<string[]>(props.value)
+  const [adding, setAdding] = useState(false)
+  const [newValue, setNewValue] = useState("")
 
   useEffect(() => {
-    if (!open) setDraft(props.value)
+    if (!open) {
+      setDraft(props.value)
+      setAdding(false)
+      setNewValue("")
+    }
   }, [open, props.value])
 
   const toggle = (value: string) => {
@@ -794,6 +853,15 @@ function RegionPicker(props: {
       const has = prev.includes(value)
       return has ? prev.filter((x) => x !== value) : [...prev, value]
     })
+  }
+
+  const addCustom = () => {
+    const trimmed = newValue.trim()
+    if (trimmed && !draft.includes(trimmed)) {
+      setDraft((prev) => [...prev, trimmed])
+    }
+    setNewValue("")
+    setAdding(false)
   }
 
   return (
@@ -819,6 +887,44 @@ function RegionPicker(props: {
                 </Button>
               )
             })}
+            {draft.filter((d) => !props.options.includes(d)).map((custom) => (
+              <Button
+                key={custom}
+                type="button"
+                size="sm"
+                variant="default"
+                onClick={() => toggle(custom)}
+              >
+                {custom}
+              </Button>
+            ))}
+
+            {adding ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  autoFocus
+                  value={newValue}
+                  onChange={(e) => setNewValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addCustom()
+                    if (e.key === "Escape") { setAdding(false); setNewValue("") }
+                  }}
+                  placeholder="New region"
+                  className="h-8 w-32 text-sm"
+                />
+                <Button type="button" size="sm" onClick={addCustom}>Add</Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="border-dashed"
+                onClick={() => setAdding(true)}
+              >
+                <Plus className="h-3 w-3 mr-1" />Add
+              </Button>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
