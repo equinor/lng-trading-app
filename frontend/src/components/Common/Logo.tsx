@@ -2,10 +2,9 @@ import { Link } from "@tanstack/react-router"
 
 import { useTheme } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
-import icon from "/assets/images/fastapi-icon.svg"
-import iconLight from "/assets/images/fastapi-icon-light.svg"
-import logo from "/assets/images/fastapi-logo.svg"
-import logoLight from "/assets/images/fastapi-logo-light.svg"
+
+const LOGO_HORIZONTAL = "https://cdn.eds.equinor.com/logo/equinor-logo-horizontal.svg"
+const LOGO_PRIMARY = "https://cdn.eds.equinor.com/logo/equinor-logo-primary.svg"
 
 interface LogoProps {
   variant?: "full" | "icon" | "responsive"
@@ -21,25 +20,26 @@ export function Logo({
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === "dark"
 
-  const fullLogo = isDark ? logoLight : logo
-  const iconLogo = isDark ? iconLight : icon
+  const color = isDark ? "#white" : "#red"
+  const fullLogo = `${LOGO_HORIZONTAL}${color}`
+  const iconLogo = `${LOGO_PRIMARY}${color}`
 
   const content =
     variant === "responsive" ? (
       <>
         <img
           src={fullLogo}
-          alt="FastAPI"
+          alt="Equinor"
           className={cn(
-            "h-6 w-auto group-data-[collapsible=icon]:hidden",
+            "h-15 w-auto group-data-[collapsible=icon]:hidden",
             className,
           )}
         />
         <img
           src={iconLogo}
-          alt="FastAPI"
+          alt="Equinor"
           className={cn(
-            "size-5 hidden group-data-[collapsible=icon]:block",
+            "size-15 hidden group-data-[collapsible=icon]:block",
             className,
           )}
         />
@@ -47,7 +47,7 @@ export function Logo({
     ) : (
       <img
         src={variant === "full" ? fullLogo : iconLogo}
-        alt="FastAPI"
+        alt="Equinor"
         className={cn(variant === "full" ? "h-6 w-auto" : "size-5", className)}
       />
     )
