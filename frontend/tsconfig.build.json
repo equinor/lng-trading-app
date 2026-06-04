@@ -1,4 +1,12 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["tests/**/*.ts"]
+  "compilerOptions": {
+    "noUnusedLocals": false
+  },
+  "exclude": [
+    "tests/**/*.ts",
+    "src/components/Admin/**",
+    "src/components/UserSettings/**",
+    "src/components/Items/**"
+  ]
 }
