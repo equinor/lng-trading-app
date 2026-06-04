@@ -1,5 +1,5 @@
 // frontend/src/routes/_layout/news_summary.tsx
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { ExternalLink } from "lucide-react"
@@ -7,6 +7,7 @@ import { ExternalLink } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatHtmlText } from "@/lib/utils"
 import { getNews, type DbNewsRow } from "@/services/news/news_api"
@@ -169,11 +170,32 @@ function NewsSummary() {
     }
   }, [])
 
+  const defaultDateFrom = useMemo(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 7)
+    return d.toISOString().slice(0, 10)
+  }, [])
+  const [dateFrom, setDateFrom] = useState(defaultDateFrom)
+  const [dateTo, setDateTo] = useState("")
+
   const newsQuery = useQuery(getFavouritedNewsQueryOptions())
   const data = newsQuery.data
 
   const grouped = useMemo<GroupedRows>(() => {
-    const fav = (data ?? []).filter((x) => toBool(x.favourited))
+    let fav = (data ?? []).filter((x) => toBool(x.favourited))
+
+    // Date filter
+    if (dateFrom || dateTo) {
+      const from = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null
+      const to = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null
+      fav = fav.filter((x) => {
+        const t = toTimestampMillis(x.rtpTimestamp)
+        if (!t) return false
+        if (from && t < from) return false
+        if (to && t > to) return false
+        return true
+      })
+    }
 
     const bullish: RowWithReadTime[] = []
     const bearish: RowWithReadTime[] = []
@@ -199,7 +221,7 @@ function NewsSummary() {
     const neutralSorted = [...neutral].sort(sortWithinBucket)
 
     return { bullish: bullishSorted, bearish: bearishSorted, neutral: neutralSorted }
-  }, [data])
+  }, [data, dateFrom, dateTo])
 
   const dominant = useMemo(() => getDominantSentiment(grouped), [grouped])
 
@@ -220,7 +242,36 @@ function NewsSummary() {
 
   return (
     <div className="flex flex-col gap-4" style={{ fontFamily: "Inter, sans-serif" }}>
-      <h1 className="text-lg font-bold tracking-tight" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>News Summary</h1>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-lg font-bold tracking-tight" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>News Summary</h1>
+        <div className="flex items-center gap-2">
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="h-9 w-37.5"
+          />
+          <span className="text-xs text-muted-foreground">to</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="h-9 w-37.5"
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-9"
+            onClick={() => {
+              setDateFrom(defaultDateFrom)
+              setDateTo("")
+            }}
+          >
+            Reset
+          </Button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:grid-rows-2">
         {keys.map((key) => (
