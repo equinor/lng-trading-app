@@ -1,5 +1,5 @@
 // frontend/src/routes/_layout/news_summary.tsx
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { ExternalLink } from "lucide-react"
@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { formatHtmlText } from "@/lib/utils"
 import { getNews, isImportantStory, type DbNewsRow } from "@/services/news/news_api"
 import { formatTime, readTimeMinFromContent, cleanTagValue } from "@/services/news/news_utils"
+import { useDateFilter } from "@/hooks/useDateFilter"
 
 type SentimentKey = "bullish" | "bearish" | "neutral"
 type RowWithReadTime = DbNewsRow & { readTimeMin: number }
@@ -129,13 +130,7 @@ function NewsSummary() {
     }
   }, [])
 
-  const defaultDateFrom = useMemo(() => {
-    const d = new Date()
-    d.setDate(d.getDate() - 7)
-    return d.toISOString().slice(0, 10)
-  }, [])
-  const [dateFrom, setDateFrom] = useState(defaultDateFrom)
-  const [dateTo, setDateTo] = useState("")
+  const { dateFrom, setDateFrom, dateTo, setDateTo, resetDates } = useDateFilter("news-summary", 7)
 
   const newsQuery = useQuery(getFavouritedNewsQueryOptions())
   const data = newsQuery.data
@@ -223,8 +218,7 @@ function NewsSummary() {
             size="sm"
             className="h-9"
             onClick={() => {
-              setDateFrom(defaultDateFrom)
-              setDateTo("")
+              resetDates()
             }}
           >
             Reset
