@@ -24,6 +24,7 @@ import {
   type DbSentiment,
 } from "@/services/news/news_api"
 import { formatTime, readTimeMinFromContent, cleanTagValue } from "@/services/news/news_utils"
+import { useDateFilter } from "@/hooks/useDateFilter"
 
 // ------------------------------------------------------
 // Types
@@ -152,13 +153,7 @@ function Newsletter() {
   const [readFilter, setReadFilter] = useState<ReadFilter>("All")
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]) // [] = all
   const [regionFilter, setRegionFilter] = useState<string[]>([]) // [] = all
-  const defaultDateFrom = useMemo(() => {
-    const d = new Date()
-    d.setDate(d.getDate() - 3)
-    return d.toISOString().slice(0, 10)
-  }, [])
-  const [dateFrom, setDateFrom] = useState(defaultDateFrom) // YYYY-MM-DD
-  const [dateTo, setDateTo] = useState("") // YYYY-MM-DD
+  const { dateFrom, setDateFrom, dateTo, setDateTo, resetDates } = useDateFilter("newsletter", 3)
 
   // Derived data
   const categoryUniverse = useMemo(() => {
@@ -409,8 +404,7 @@ function Newsletter() {
                 setReadFilter("All")
                 setCategoryFilter([])
                 setRegionFilter([])
-                setDateFrom(defaultDateFrom)
-                setDateTo("")
+                resetDates()
               }}
             >
               Reset
