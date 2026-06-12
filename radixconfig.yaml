@@ -27,11 +27,15 @@ spec:
         - DATABRICKS_CLIENT_ID
         - DATABRICKS_CLIENT_SECRET
         - DATABRICKS_WORKSPACE_RESOURCE_ID
+        - GRAPH_TENANT_ID
+        - GRAPH_CLIENT_ID
+        - GRAPH_CLIENT_SECRET
       variables:
         NEWS_BACKEND: databricks
         NEWS_TABLE: ms_vulcan_gplng_plab.lng_apac.platts_lng_top_news
         DATABRICKS_USE_SERVICE_PRINCIPAL: "true"
         FIRST_SUPERUSER: admin@example.com
+        GRAPH_MAIL_FROM: csee@equinor.com
       healthChecks:
         livenessProbe:
           httpGet:

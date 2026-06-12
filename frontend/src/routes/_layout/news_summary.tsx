@@ -1,16 +1,25 @@
 // frontend/src/routes/_layout/news_summary.tsx
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
-import { ExternalLink } from "lucide-react"
+import { ExternalLink, Mail } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatHtmlText } from "@/lib/utils"
-import { getNews, isImportantStory, type DbNewsRow } from "@/services/news/news_api"
+import { getNews, isImportantStory, sendEmailSummary, type DbNewsRow } from "@/services/news/news_api"
 import { formatTime, readTimeMinFromContent, cleanTagValue } from "@/services/news/news_utils"
 import { useDateFilter } from "@/hooks/useDateFilter"
 
@@ -174,6 +183,8 @@ function NewsSummary() {
       <div className="flex flex-wrap items-center justify-between gap-4 shrink-0">
         <h1 className="text-lg font-bold tracking-tight" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>LNG market news / sentiment </h1>
         <div className="flex items-center gap-2">
+          <SendEmailButton dateFrom={dateFrom} dateTo={dateTo} />
+          <div className="w-px h-5 bg-border mx-1" />
           <Input
             type="date"
             value={dateFrom}
@@ -255,6 +266,98 @@ function NewsSummary() {
         </div>
       )}
     </div>
+  )
+}
+
+function SendEmailButton({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
+  const DEFAULT_RECIPIENTS = ["csee@equinor.com"]
+  const [open, setOpen] = useState(false)
+  const [recipients, setRecipients] = useState<string[]>(DEFAULT_RECIPIENTS)
+  const [newEmail, setNewEmail] = useState("")
+  const [sending, setSending] = useState(false)
+
+  const addRecipient = () => {
+    const trimmed = newEmail.trim().toLowerCase()
+    if (trimmed && trimmed.includes("@") && !recipients.includes(trimmed)) {
+      setRecipients([...recipients, trimmed])
+      setNewEmail("")
+    }
+  }
+
+  const removeRecipient = (email: string) => {
+    setRecipients(recipients.filter((r) => r !== email))
+  }
+
+  const handleSend = async () => {
+    if (recipients.length === 0) return
+    setSending(true)
+    try {
+      for (const recipient of recipients) {
+        await sendEmailSummary(recipient, dateFrom || undefined, dateTo || undefined)
+      }
+      setOpen(false)
+    } catch {
+      // Could show error toast
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5">
+          <Mail className="h-3.5 w-3.5" />
+          Email
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Send News Summary</DialogTitle>
+          <DialogDescription>
+            Email the current sentiment summary to the recipients below.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          <div className="flex flex-wrap gap-1.5">
+            {recipients.map((email) => (
+              <Badge key={email} variant="secondary" className="gap-1 pr-1">
+                {email}
+                <button
+                  type="button"
+                  className="ml-1 rounded-full hover:bg-muted-foreground/20 px-1 text-xs"
+                  onClick={() => removeRecipient(email)}
+                >
+                  ×
+                </button>
+              </Badge>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              placeholder="Add recipient..."
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              className="h-9"
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addRecipient() } }}
+            />
+            <Button type="button" variant="secondary" size="sm" className="h-9" onClick={addRecipient} disabled={!newEmail.trim()}>
+              Add
+            </Button>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button type="button" onClick={handleSend} disabled={sending || recipients.length === 0}>
+            {sending ? "Sending..." : `Send to ${recipients.length} recipient${recipients.length !== 1 ? "s" : ""}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

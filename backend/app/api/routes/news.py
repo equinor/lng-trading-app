@@ -2,7 +2,10 @@
 
 import logging
 import time
-from fastapi import APIRouter, BackgroundTasks
+from datetime import datetime
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel, EmailStr, Field
 
 from app.schemas.news import (
     NewsListResponse,
@@ -156,3 +159,111 @@ def set_classification(article_id: int, body: SetClassificationBody, bg: Backgro
     _set_pending_override(article_id, {"category": body.category, "region": body.region})
     bg.add_task(_bg_update, article_id, {"category": body.category, "region": body.region})
     return {"ok": True, "data": optimistic}
+
+
+# --- Email summary ---
+
+class EmailSummaryBody(BaseModel):
+    recipient: EmailStr
+    date_from: str | None = None  # YYYY-MM-DD
+    date_to: str | None = None  # YYYY-MM-DD
+
+
+SENTIMENT_COLORS = {
+    "bullish": "#16a34a",
+    "bearish": "#dc2626",
+    "neutral": "#2563eb",
+}
+
+
+def _group_for_email(rows: list[dict], date_from: str | None, date_to: str | None) -> dict:
+    from_ts = datetime.strptime(date_from, "%Y-%m-%d").timestamp() * 1000 if date_from else None
+    to_ts = (datetime.strptime(date_to, "%Y-%m-%d").timestamp() + 86399) * 1000 if date_to else None
+
+    grouped: dict[str, list] = {"bullish": [], "bearish": [], "neutral": []}
+    for row in rows:
+        # Only favourited articles
+        fav = row.get("favourited")
+        if not (fav is True or str(fav).lower() == "true"):
+            continue
+
+        # Date filter
+        ts = row.get("rtpTimestamp")
+        if ts:
+            if isinstance(ts, str):
+                try:
+                    ts_ms = datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000
+                except (ValueError, TypeError):
+                    ts_ms = 0
+            elif isinstance(ts, datetime):
+                ts_ms = ts.timestamp() * 1000
+            else:
+                ts_ms = float(ts)
+            if from_ts and ts_ms < from_ts:
+                continue
+            if to_ts and ts_ms > to_ts:
+                continue
+
+        sentiment = (row.get("official_sentiment") or "neutral").lower()
+        if sentiment not in grouped:
+            sentiment = "neutral"
+
+        grouped[sentiment].append({
+            "headline": row.get("headline", ""),
+            "summary": row.get("summary", ""),
+            "source": row.get("source", ""),
+            "timestamp": _format_ts(row.get("rtpTimestamp")),
+            "url": row.get("documentUrl"),
+            "regions": row.get("region", []) or [],
+            "categories": row.get("category", []) or [],
+        })
+
+    return grouped
+
+
+def _format_ts(ts: str | datetime | None) -> str:
+    if not ts:
+        return ""
+    if isinstance(ts, str):
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return ts
+    else:
+        dt = ts
+    return dt.strftime("%d %b, %I:%M %p")
+
+
+@router.post("/email-summary")
+def send_news_summary_email(body: EmailSummaryBody, bg: BackgroundTasks):
+    from app.core.config import settings
+    if not settings.emails_enabled:
+        raise HTTPException(status_code=503, detail="Email not configured (SMTP_HOST is not set)")
+
+    rows = news_repo.list_news(limit=500, favourited=True)
+    grouped = _group_for_email(rows, body.date_from, body.date_to)
+
+    date_range = ""
+    if body.date_from and body.date_to:
+        date_range = f"{body.date_from} to {body.date_to}"
+    elif body.date_from:
+        date_range = f"From {body.date_from}"
+    elif body.date_to:
+        date_range = f"Up to {body.date_to}"
+    else:
+        date_range = "All dates"
+
+    sections = [
+        {"title": "Bullish", "color": SENTIMENT_COLORS["bullish"], "articles": grouped["bullish"]},
+        {"title": "Bearish", "color": SENTIMENT_COLORS["bearish"], "articles": grouped["bearish"]},
+        {"title": "Neutral", "color": SENTIMENT_COLORS["neutral"], "articles": grouped["neutral"]},
+    ]
+
+    from app.utils import render_email_template, send_email
+    html = render_email_template(
+        template_name="news_summary.html",
+        context={"sections": sections, "date_range": date_range},
+    )
+
+    bg.add_task(send_email, email_to=body.recipient, subject="LNG News Summary", html_content=html)
+    return {"ok": True, "message": f"Summary email queued for {body.recipient}"}

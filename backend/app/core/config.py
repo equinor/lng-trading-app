@@ -72,6 +72,26 @@ class Settings(BaseSettings):
     MOCK_NEWS_REGION_NONE_PROBABILITY: float = 0.15
     MOCK_NEWS_SOURCE: str = "mock"
 
+    # --- Equinor Atlas Email ---
+    ATLAS_TENANT_ID: str = "3aa4a235-b6e2-48d5-9195-7fcf05b459b0"
+    ATLAS_CLIENT_ID: str | None = None
+    ATLAS_CLIENT_SECRET: str | None = None
+    ATLAS_ENV: Literal["dev", "test", "qa", "prod"] = "prod"
+    ATLAS_REPLY_TO: str = "csee@equinor.com"
+    ATLAS_DEFAULT_RECIPIENT: str = "csee@equinor.com"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def atlas_host(self) -> str:
+        if self.ATLAS_ENV == "prod":
+            return "atlas.equinor.com"
+        return f"{self.ATLAS_ENV}.atlas.equinor.com"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def emails_enabled(self) -> bool:
+        return bool(self.ATLAS_CLIENT_ID and self.ATLAS_CLIENT_SECRET)
+
 
 
 settings = Settings()  # type: ignore

@@ -77,3 +77,10 @@ export async function patchClassification(articleId: number, category: string[],
   })
   return res.data
 }
+
+export async function sendEmailSummary(recipient: string, dateFrom?: string, dateTo?: string) {
+  return apiRequest<{ ok: boolean; message: string }>(`${NEWS_BASE}email-summary`, {
+    method: "POST",
+    body: { recipient, date_from: dateFrom || null, date_to: dateTo || null },
+  })
+}

@@ -1,10 +1,11 @@
+import base64
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-import emails  # type: ignore
+import httpx
 import jwt
 from jinja2 import Template
 from jwt.exceptions import InvalidTokenError
@@ -32,27 +33,47 @@ def render_email_template(*, template_name: str, context: dict[str, Any]) -> str
 
 def send_email(
     *,
-    email_to: str,
+    email_to: str = "",
     subject: str = "",
     html_content: str = "",
 ) -> None:
-    assert settings.emails_enabled, "no provided configuration for email variables"
-    message = emails.Message(
-        subject=subject,
-        html=html_content,
-        mail_from=(settings.EMAILS_FROM_NAME, settings.EMAILS_FROM_EMAIL),
+    assert settings.emails_enabled, "Equinor Atlas email not configured"
+
+    recipient = email_to or settings.ATLAS_DEFAULT_RECIPIENT
+
+    # Get access token via client credentials flow
+    scope = f"https://{settings.atlas_host}/management/api/.default"
+    token_url = f"https://login.microsoftonline.com/{settings.ATLAS_TENANT_ID}/oauth2/v2.0/token"
+    token_resp = httpx.post(token_url, data={
+        "client_id": settings.ATLAS_CLIENT_ID,
+        "client_secret": settings.ATLAS_CLIENT_SECRET,
+        "scope": scope,
+        "grant_type": "client_credentials",
+    }, timeout=30.0)
+    if token_resp.status_code != 200:
+        logger.error(f"Token request failed ({token_resp.status_code}): {token_resp.text}")
+    token_resp.raise_for_status()
+    access_token = token_resp.json()["access_token"]
+
+    # Send mail via Atlas API
+    api_url = f"https://{settings.atlas_host}/management/api/messages/mail"
+    html_b64 = base64.b64encode(html_content.encode("utf-8")).decode("ascii")
+    mail_message = {
+        "subject": subject,
+        "replyTo": settings.ATLAS_REPLY_TO,
+        "htmlContent": html_b64,
+        "recipients": [recipient],
+    }
+    resp = httpx.post(
+        api_url,
+        json=mail_message,
+        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+        timeout=30.0,
     )
-    smtp_options = {"host": settings.SMTP_HOST, "port": settings.SMTP_PORT}
-    if settings.SMTP_TLS:
-        smtp_options["tls"] = True
-    elif settings.SMTP_SSL:
-        smtp_options["ssl"] = True
-    if settings.SMTP_USER:
-        smtp_options["user"] = settings.SMTP_USER
-    if settings.SMTP_PASSWORD:
-        smtp_options["password"] = settings.SMTP_PASSWORD
-    response = message.send(to=email_to, smtp=smtp_options)
-    logger.info(f"send email result: {response}")
+    if resp.status_code != 200:
+        logger.error(f"Atlas mail failed ({resp.status_code}): {resp.text}")
+    resp.raise_for_status()
+    logger.info(f"Atlas mail to {recipient}: {resp.status_code}")
 
 
 def generate_test_email(email_to: str) -> EmailData:
