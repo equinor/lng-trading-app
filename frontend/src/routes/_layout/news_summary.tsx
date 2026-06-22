@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatHtmlText } from "@/lib/utils"
-import { getNews, isImportantStory, sendEmailSummary, type DbNewsRow } from "@/services/news/news_api"
+import { getNews, sendEmailSummary, type DbNewsRow } from "@/services/news/news_api"
 import { formatTime, readTimeMinFromContent, cleanTagValue } from "@/services/news/news_utils"
 import { useDateFilter } from "@/hooks/useDateFilter"
 
@@ -144,13 +144,8 @@ function NewsSummary() {
       else neutral.push(row)
     }
 
-    const sortWithinBucket = (a: DbNewsRow, b: DbNewsRow) => {
-      const importantRankA = isImportantStory(a.importantStory) ? 1 : 0
-      const importantRankB = isImportantStory(b.importantStory) ? 1 : 0
-      if (importantRankA !== importantRankB) return importantRankB - importantRankA
-
-      return toTimestampMillis(b.rtpTimestamp) - toTimestampMillis(a.rtpTimestamp)
-    }
+    const sortWithinBucket = (a: DbNewsRow, b: DbNewsRow) =>
+      toTimestampMillis(b.rtpTimestamp) - toTimestampMillis(a.rtpTimestamp)
 
     const bullishSorted = [...bullish].sort(sortWithinBucket)
     const bearishSorted = [...bearish].sort(sortWithinBucket)
