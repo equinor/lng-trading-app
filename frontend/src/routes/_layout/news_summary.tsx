@@ -485,7 +485,9 @@ function SentimentPanel(props: {
             <div className="pb-1">
               <span className={`text-sm font-semibold ${panelTextClass(key)}`}>{props.title}</span>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div
+              className="min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            >
               <div className={props.columns === 2 ? "grid grid-cols-2 gap-1.5" : "space-y-1.5"}>
               {visibleRows.map((n) => (
                 <article key={n.id} className="rounded border px-2 py-1 overflow-hidden">
