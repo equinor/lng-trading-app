@@ -1,5 +1,5 @@
 // frontend/src/routes/_layout/news_summary.tsx
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { ExternalLink, Mail } from "lucide-react"
@@ -67,6 +67,52 @@ function panelEmptyText(key: SentimentKey) {
   return "No favourited neutral articles."
 }
 
+function clampPercent(value: number, min = 25, max = 75): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function beginResizeDrag(
+  event: ReactPointerEvent<HTMLElement>,
+  container: HTMLElement | null,
+  axis: "x" | "y",
+  setPercent: (value: number) => void,
+  minPercent = 25,
+  maxPercent = 75,
+) {
+  if (!container) return
+  event.preventDefault()
+
+  const rect = container.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return
+
+  const previousUserSelect = document.body.style.userSelect
+  const previousCursor = document.body.style.cursor
+  document.body.style.userSelect = "none"
+  document.body.style.cursor = axis === "x" ? "col-resize" : "row-resize"
+
+  const update = (clientX: number, clientY: number) => {
+    const raw = axis === "x"
+      ? ((clientX - rect.left) / rect.width) * 100
+      : ((clientY - rect.top) / rect.height) * 100
+    setPercent(clampPercent(raw, minPercent, maxPercent))
+  }
+
+  update(event.clientX, event.clientY)
+
+  const onMove = (moveEvent: PointerEvent) => {
+    update(moveEvent.clientX, moveEvent.clientY)
+  }
+
+  const onUp = () => {
+    window.removeEventListener("pointermove", onMove)
+    document.body.style.userSelect = previousUserSelect
+    document.body.style.cursor = previousCursor
+  }
+
+  window.addEventListener("pointermove", onMove)
+  window.addEventListener("pointerup", onUp, { once: true })
+}
+
 export const Route = createFileRoute("/_layout/news_summary")({
   component: NewsSummaryRoute,
   head: () => ({
@@ -113,6 +159,19 @@ function NewsSummary() {
   }, [])
 
   const { dateFrom, setDateFrom, dateTo, setDateTo, resetDates } = useDateFilter("news-summary", 7)
+  const neutralContainerRef = useRef<HTMLDivElement>(null)
+  const neutralTopRowRef = useRef<HTMLDivElement>(null)
+  const bullishContainerRef = useRef<HTMLDivElement>(null)
+  const bullishRightColumnRef = useRef<HTMLDivElement>(null)
+  const bearishContainerRef = useRef<HTMLDivElement>(null)
+  const bearishLeftColumnRef = useRef<HTMLDivElement>(null)
+
+  const [neutralTopHeightPct, setNeutralTopHeightPct] = useState(55)
+  const [neutralTopSplitPct, setNeutralTopSplitPct] = useState(50)
+  const [bullishLeftWidthPct, setBullishLeftWidthPct] = useState(56)
+  const [bullishRightTopHeightPct, setBullishRightTopHeightPct] = useState(50)
+  const [bearishLeftWidthPct, setBearishLeftWidthPct] = useState(44)
+  const [bearishLeftTopHeightPct, setBearishLeftTopHeightPct] = useState(50)
 
   const newsQuery = useQuery(getFavouritedNewsQueryOptions())
   const data = newsQuery.data
@@ -208,35 +267,53 @@ function NewsSummary() {
       </div>
 
       {dominant === "neutral" && (
-        <>
+        <div ref={neutralContainerRef} className="flex flex-col flex-1 min-h-0">
           {/* Top: Bullish + Bearish side by side */}
-          <div className="flex gap-2 flex-1 min-h-0">
-            <div className="flex-1 min-w-0">
-              <SentimentPanel title="Bullish" rows={grouped.bullish} emptyText={panelEmptyText("bullish")} columns={1} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <SentimentPanel title="Bearish" rows={grouped.bearish} emptyText={panelEmptyText("bearish")} columns={1} />
+          <div className="min-h-0" style={{ height: `${neutralTopHeightPct}%` }}>
+            <div ref={neutralTopRowRef} className="flex h-full min-h-0 items-stretch">
+              <div className="min-w-0 min-h-0" style={{ width: `${neutralTopSplitPct}%` }}>
+                <SentimentPanel title="Bullish" rows={grouped.bullish} emptyText={panelEmptyText("bullish")} columns={1} />
+              </div>
+              <ResizeHandle
+                orientation="vertical"
+                onPointerDown={(e) => beginResizeDrag(e, neutralTopRowRef.current, "x", setNeutralTopSplitPct)}
+              />
+              <div className="min-w-0 min-h-0" style={{ width: `${100 - neutralTopSplitPct}%` }}>
+                <SentimentPanel title="Bearish" rows={grouped.bearish} emptyText={panelEmptyText("bearish")} columns={1} />
+              </div>
             </div>
           </div>
+          <ResizeHandle
+            orientation="horizontal"
+            onPointerDown={(e) => beginResizeDrag(e, neutralContainerRef.current, "y", setNeutralTopHeightPct, 35, 75)}
+          />
           {/* Bottom: Neutral full-width, 2-col */}
-          <div className="shrink-0">
+          <div className="min-h-0" style={{ height: `${100 - neutralTopHeightPct}%` }}>
             <SentimentPanel title="Neutral" rows={grouped.neutral} emptyText={panelEmptyText("neutral")} columns={2} />
           </div>
-        </>
+        </div>
       )}
 
       {dominant === "bullish" && (
-        <div className="flex gap-2 flex-1 min-h-0">
+        <div ref={bullishContainerRef} className="flex items-stretch flex-1 min-h-0">
           {/* Left: Bullish full height */}
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 min-h-0" style={{ width: `${bullishLeftWidthPct}%` }}>
             <SentimentPanel title="Bullish" rows={grouped.bullish} emptyText={panelEmptyText("bullish")} columns={1} />
           </div>
+          <ResizeHandle
+            orientation="vertical"
+            onPointerDown={(e) => beginResizeDrag(e, bullishContainerRef.current, "x", setBullishLeftWidthPct)}
+          />
           {/* Right: Bearish top + Neutral bottom */}
-          <div className="flex flex-col gap-2 flex-1 min-w-0">
-            <div className="flex-1 min-h-0">
+          <div ref={bullishRightColumnRef} className="flex flex-col min-w-0 min-h-0" style={{ width: `${100 - bullishLeftWidthPct}%` }}>
+            <div className="min-h-0" style={{ height: `${bullishRightTopHeightPct}%` }}>
               <SentimentPanel title="Bearish" rows={grouped.bearish} emptyText={panelEmptyText("bearish")} columns={1} />
             </div>
-            <div className="flex-1 min-h-0">
+            <ResizeHandle
+              orientation="horizontal"
+              onPointerDown={(e) => beginResizeDrag(e, bullishRightColumnRef.current, "y", setBullishRightTopHeightPct)}
+            />
+            <div className="min-h-0" style={{ height: `${100 - bullishRightTopHeightPct}%` }}>
               <SentimentPanel title="Neutral" rows={grouped.neutral} emptyText={panelEmptyText("neutral")} columns={1} />
             </div>
           </div>
@@ -244,23 +321,56 @@ function NewsSummary() {
       )}
 
       {dominant === "bearish" && (
-        <div className="flex gap-2 flex-1 min-h-0">
+        <div ref={bearishContainerRef} className="flex items-stretch flex-1 min-h-0">
           {/* Left: Bullish top + Neutral bottom */}
-          <div className="flex flex-col gap-2 flex-1 min-w-0">
-            <div className="flex-1 min-h-0">
+          <div ref={bearishLeftColumnRef} className="flex flex-col min-w-0 min-h-0" style={{ width: `${bearishLeftWidthPct}%` }}>
+            <div className="min-h-0" style={{ height: `${bearishLeftTopHeightPct}%` }}>
               <SentimentPanel title="Bullish" rows={grouped.bullish} emptyText={panelEmptyText("bullish")} columns={1} />
             </div>
-            <div className="flex-1 min-h-0">
+            <ResizeHandle
+              orientation="horizontal"
+              onPointerDown={(e) => beginResizeDrag(e, bearishLeftColumnRef.current, "y", setBearishLeftTopHeightPct)}
+            />
+            <div className="min-h-0" style={{ height: `${100 - bearishLeftTopHeightPct}%` }}>
               <SentimentPanel title="Neutral" rows={grouped.neutral} emptyText={panelEmptyText("neutral")} columns={1} />
             </div>
           </div>
+          <ResizeHandle
+            orientation="vertical"
+            onPointerDown={(e) => beginResizeDrag(e, bearishContainerRef.current, "x", setBearishLeftWidthPct)}
+          />
           {/* Right: Bearish full height */}
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 min-h-0" style={{ width: `${100 - bearishLeftWidthPct}%` }}>
             <SentimentPanel title="Bearish" rows={grouped.bearish} emptyText={panelEmptyText("bearish")} columns={1} />
           </div>
         </div>
       )}
     </div>
+  )
+}
+
+function ResizeHandle(props: {
+  orientation: "vertical" | "horizontal"
+  onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void
+}) {
+  if (props.orientation === "vertical") {
+    return (
+      <button
+        type="button"
+        aria-label="Resize columns"
+        onPointerDown={props.onPointerDown}
+        className="mx-1 w-1.5 shrink-0 rounded bg-border/80 hover:bg-border cursor-col-resize"
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label="Resize rows"
+      onPointerDown={props.onPointerDown}
+      className="my-1 h-1.5 shrink-0 rounded bg-border/80 hover:bg-border cursor-row-resize"
+    />
   )
 }
 
@@ -273,7 +383,7 @@ function SendEmailButton({ dateFrom, dateTo }: { dateFrom: string; dateTo: strin
 
   const addRecipient = () => {
     const trimmed = newEmail.trim().toLowerCase()
-    if (trimmed && trimmed.includes("@") && !recipients.includes(trimmed)) {
+    if (trimmed?.includes("@") && !recipients.includes(trimmed)) {
       setRecipients([...recipients, trimmed])
       setNewEmail("")
     }
