@@ -490,7 +490,7 @@ function SentimentPanel(props: {
             >
               <div className={props.columns === 2 ? "grid grid-cols-2 gap-1.5" : "space-y-1.5"}>
               {visibleRows.map((n) => (
-                <article key={n.id} className="rounded border px-2 py-1 overflow-hidden">
+                <article key={n.id} className="rounded border px-2 py-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 space-y-0.5">
                       <div className="flex flex-wrap items-center gap-1">
@@ -510,7 +510,7 @@ function SentimentPanel(props: {
                       </div>
                       <h2 className="text-sm font-semibold leading-snug line-clamp-1" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>{n.headline}</h2>
                       {(n.paragraph_summary || n.summary) && (
-                        <p className="text-xs text-muted-foreground line-clamp-1">
+                        <p className="text-xs text-muted-foreground whitespace-pre-wrap wrap-break-word">
                           {formatHtmlText(n.paragraph_summary || n.summary || "")}
                         </p>
                       )}
