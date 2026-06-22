@@ -481,11 +481,12 @@ function SentimentPanel(props: {
         {visibleRows.length === 0 ? (
           <div className="py-4 text-center text-sm text-muted-foreground">{props.emptyText}</div>
         ) : (
-          <>
+          <div className="flex h-full min-h-0 flex-col">
             <div className="pb-1">
               <span className={`text-sm font-semibold ${panelTextClass(key)}`}>{props.title}</span>
             </div>
-            <div className={props.columns === 2 ? "grid grid-cols-2 gap-1.5" : "space-y-1.5"}>
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              <div className={props.columns === 2 ? "grid grid-cols-2 gap-1.5" : "space-y-1.5"}>
               {visibleRows.map((n) => (
                 <article key={n.id} className="rounded border px-2 py-1 overflow-hidden">
                   <div className="flex items-start justify-between gap-2">
@@ -527,8 +528,9 @@ function SentimentPanel(props: {
                   </div>
                 </article>
               ))}
+              </div>
             </div>
-          </>
+          </div>
         )}
       </div>
     </Card>
