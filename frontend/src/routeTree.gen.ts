@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutNewsletterRouteImport } from './routes/_layout/newsletter'
+import { Route as LayoutNews_summary_condensedRouteImport } from './routes/_layout/news_summary_condensed'
 import { Route as LayoutNews_summaryRouteImport } from './routes/_layout/news_summary'
 
 const LayoutRoute = LayoutRouteImport.update({
@@ -28,6 +29,12 @@ const LayoutNewsletterRoute = LayoutNewsletterRouteImport.update({
   path: '/newsletter',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutNews_summary_condensedRoute =
+  LayoutNews_summary_condensedRouteImport.update({
+    id: '/news_summary_condensed',
+    path: '/news_summary_condensed',
+    getParentRoute: () => LayoutRoute,
+  } as any)
 const LayoutNews_summaryRoute = LayoutNews_summaryRouteImport.update({
   id: '/news_summary',
   path: '/news_summary',
@@ -37,10 +44,12 @@ const LayoutNews_summaryRoute = LayoutNews_summaryRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
   '/news_summary': typeof LayoutNews_summaryRoute
+  '/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
   '/newsletter': typeof LayoutNewsletterRoute
 }
 export interface FileRoutesByTo {
   '/news_summary': typeof LayoutNews_summaryRoute
+  '/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
   '/newsletter': typeof LayoutNewsletterRoute
   '/': typeof LayoutIndexRoute
 }
@@ -48,18 +57,20 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
   '/_layout/news_summary': typeof LayoutNews_summaryRoute
+  '/_layout/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
   '/_layout/newsletter': typeof LayoutNewsletterRoute
   '/_layout/': typeof LayoutIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/news_summary' | '/newsletter'
+  fullPaths: '/' | '/news_summary' | '/news_summary_condensed' | '/newsletter'
   fileRoutesByTo: FileRoutesByTo
-  to: '/news_summary' | '/newsletter' | '/'
+  to: '/news_summary' | '/news_summary_condensed' | '/newsletter' | '/'
   id:
     | '__root__'
     | '/_layout'
     | '/_layout/news_summary'
+    | '/_layout/news_summary_condensed'
     | '/_layout/newsletter'
     | '/_layout/'
   fileRoutesById: FileRoutesById
@@ -91,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutNewsletterRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/news_summary_condensed': {
+      id: '/_layout/news_summary_condensed'
+      path: '/news_summary_condensed'
+      fullPath: '/news_summary_condensed'
+      preLoaderRoute: typeof LayoutNews_summary_condensedRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/news_summary': {
       id: '/_layout/news_summary'
       path: '/news_summary'
@@ -103,12 +121,14 @@ declare module '@tanstack/react-router' {
 
 interface LayoutRouteChildren {
   LayoutNews_summaryRoute: typeof LayoutNews_summaryRoute
+  LayoutNews_summary_condensedRoute: typeof LayoutNews_summary_condensedRoute
   LayoutNewsletterRoute: typeof LayoutNewsletterRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutNews_summaryRoute: LayoutNews_summaryRoute,
+  LayoutNews_summary_condensedRoute: LayoutNews_summary_condensedRoute,
   LayoutNewsletterRoute: LayoutNewsletterRoute,
   LayoutIndexRoute: LayoutIndexRoute,
 }
