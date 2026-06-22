@@ -498,9 +498,9 @@ function Newsletter() {
                             <h2 className="text-base font-semibold leading-snug hover:underline">{n.headline}</h2>
                           </button>
 
-                          {n.summary && (
+                          {(n.paragraph_summary || n.summary) && (
                             <p className="text-sm leading-6 text-muted-foreground line-clamp-3 whitespace-pre-wrap">
-                              {formatHtmlText(n.summary)}
+                              {formatHtmlText(n.paragraph_summary || n.summary || "")}
                             </p>
                           )}
 

@@ -1,8 +1,8 @@
-// frontend/src/routes/_layout/news_summary.tsx
+// frontend/src/routes/_layout/news_summary_condensed.tsx
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
-import { ExternalLink, Mail } from "lucide-react"
+import { Mail } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatHtmlText } from "@/lib/utils"
 import { getNews, sendEmailSummary, type DbNewsRow } from "@/services/news/news_api"
-import { formatTime, readTimeMinFromContent, cleanTagValue } from "@/services/news/news_utils"
+import { formatTime, readTimeMinFromContent } from "@/services/news/news_utils"
 import { useDateFilter } from "@/hooks/useDateFilter"
 
 type SentimentKey = "bullish" | "bearish" | "neutral"
@@ -43,7 +43,7 @@ function toTimestampMillis(value: string | null | undefined): number {
 
 function getFavouritedNewsQueryOptions() {
   return {
-    queryKey: ["news_summary", "favourited"],
+    queryKey: ["news_summary_condensed", "favourited"],
     queryFn: () => getNews(500, true),
     refetchOnMount: "always" as const,
   }
@@ -113,14 +113,14 @@ function beginResizeDrag(
   window.addEventListener("pointerup", onUp, { once: true })
 }
 
-export const Route = createFileRoute("/_layout/news_summary")({
-  component: NewsSummaryRoute,
+export const Route = createFileRoute("/_layout/news_summary_condensed")({
+  component: NewsSummaryCondensedRoute,
   head: () => ({
-    meta: [{ title: "News Summary - LNG Trading App" }],
+    meta: [{ title: "News Summary (Condensed) - LNG Trading App" }],
   }),
 })
 
-function PendingNewsSummary() {
+function PendingNewsSummaryCondensed() {
   return (
     <div className="flex flex-col gap-4">
       <div className="space-y-2">
@@ -137,11 +137,11 @@ function PendingNewsSummary() {
   )
 }
 
-function NewsSummaryRoute() {
-  return <NewsSummary />
+function NewsSummaryCondensedRoute() {
+  return <NewsSummaryCondensed />
 }
 
-function NewsSummary() {
+function NewsSummaryCondensed() {
   useEffect(() => {
     const href = "https://cdn.eds.equinor.com/font/eds-uprights-vf.css"
     const existing = document.querySelector(`link[rel="stylesheet"][href="${href}"]`)
@@ -158,7 +158,7 @@ function NewsSummary() {
     }
   }, [])
 
-  const { dateFrom, setDateFrom, dateTo, setDateTo, resetDates } = useDateFilter("news-summary", 7)
+  const { dateFrom, setDateFrom, dateTo, setDateTo, resetDates } = useDateFilter("news-summary-condensed", 7)
   const neutralContainerRef = useRef<HTMLDivElement>(null)
   const neutralTopRowRef = useRef<HTMLDivElement>(null)
   const bullishContainerRef = useRef<HTMLDivElement>(null)
@@ -179,7 +179,6 @@ function NewsSummary() {
   const grouped = useMemo<GroupedRows>(() => {
     let fav = (data ?? []).filter((x) => toBool(x.favourited))
 
-    // Date filter
     if (dateFrom || dateTo) {
       const from = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null
       const to = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null
@@ -206,11 +205,11 @@ function NewsSummary() {
     const sortWithinBucket = (a: DbNewsRow, b: DbNewsRow) =>
       toTimestampMillis(b.rtpTimestamp) - toTimestampMillis(a.rtpTimestamp)
 
-    const bullishSorted = [...bullish].sort(sortWithinBucket)
-    const bearishSorted = [...bearish].sort(sortWithinBucket)
-    const neutralSorted = [...neutral].sort(sortWithinBucket)
-
-    return { bullish: bullishSorted, bearish: bearishSorted, neutral: neutralSorted }
+    return {
+      bullish: [...bullish].sort(sortWithinBucket),
+      bearish: [...bearish].sort(sortWithinBucket),
+      neutral: [...neutral].sort(sortWithinBucket),
+    }
   }, [data, dateFrom, dateTo])
 
   const dominant: SentimentKey = grouped.bullish.length >= grouped.bearish.length && grouped.bullish.length >= grouped.neutral.length
@@ -219,9 +218,8 @@ function NewsSummary() {
       ? "bearish"
       : "neutral"
 
-  // Prevent outdated cached content from flashing before a fresh GET returns.
   if (!newsQuery.isFetchedAfterMount) {
-    return <PendingNewsSummary />
+    return <PendingNewsSummaryCondensed />
   }
 
   if (newsQuery.isError) {
@@ -233,9 +231,11 @@ function NewsSummary() {
   }
 
   return (
-    <div className="flex flex-col gap-2 h-[calc(100vh-6rem)]" style={{ fontFamily: "Inter, sans-serif" }}>
+    <div className="flex flex-col gap-2 h-[calc(100vh-6rem)]" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>
       <div className="flex flex-wrap items-center justify-between gap-4 shrink-0">
-        <h1 className="text-lg font-bold tracking-tight" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>LNG market news / sentiment </h1>
+        <h1 className="text-lg font-bold tracking-tight">
+          LNG market news / sentiment (condensed)
+        </h1>
         <div className="flex items-center gap-2">
           <SendEmailButton dateFrom={dateFrom} dateTo={dateTo} />
           <div className="w-px h-5 bg-border mx-1" />
@@ -268,7 +268,6 @@ function NewsSummary() {
 
       {dominant === "neutral" && (
         <div ref={neutralContainerRef} className="flex flex-col flex-1 min-h-0">
-          {/* Top: Bullish + Bearish side by side */}
           <div className="min-h-0" style={{ height: `${neutralTopHeightPct}%` }}>
             <div ref={neutralTopRowRef} className="flex h-full min-h-0 items-stretch">
               <div className="min-w-0 min-h-0" style={{ width: `${neutralTopSplitPct}%` }}>
@@ -287,7 +286,6 @@ function NewsSummary() {
             orientation="horizontal"
             onPointerDown={(e) => beginResizeDrag(e, neutralContainerRef.current, "y", setNeutralTopHeightPct, 35, 75)}
           />
-          {/* Bottom: Neutral full-width, 2-col */}
           <div className="min-h-0" style={{ height: `${100 - neutralTopHeightPct}%` }}>
             <SentimentPanel title="Neutral" rows={grouped.neutral} emptyText={panelEmptyText("neutral")} columns={2} />
           </div>
@@ -296,7 +294,6 @@ function NewsSummary() {
 
       {dominant === "bullish" && (
         <div ref={bullishContainerRef} className="flex items-stretch flex-1 min-h-0">
-          {/* Left: Bullish full height */}
           <div className="min-w-0 min-h-0" style={{ width: `${bullishLeftWidthPct}%` }}>
             <SentimentPanel title="Bullish" rows={grouped.bullish} emptyText={panelEmptyText("bullish")} columns={1} />
           </div>
@@ -304,7 +301,6 @@ function NewsSummary() {
             orientation="vertical"
             onPointerDown={(e) => beginResizeDrag(e, bullishContainerRef.current, "x", setBullishLeftWidthPct)}
           />
-          {/* Right: Bearish top + Neutral bottom */}
           <div ref={bullishRightColumnRef} className="flex flex-col min-w-0 min-h-0" style={{ width: `${100 - bullishLeftWidthPct}%` }}>
             <div className="min-h-0" style={{ height: `${bullishRightTopHeightPct}%` }}>
               <SentimentPanel title="Bearish" rows={grouped.bearish} emptyText={panelEmptyText("bearish")} columns={1} />
@@ -322,7 +318,6 @@ function NewsSummary() {
 
       {dominant === "bearish" && (
         <div ref={bearishContainerRef} className="flex items-stretch flex-1 min-h-0">
-          {/* Left: Bullish top + Neutral bottom */}
           <div ref={bearishLeftColumnRef} className="flex flex-col min-w-0 min-h-0" style={{ width: `${bearishLeftWidthPct}%` }}>
             <div className="min-h-0" style={{ height: `${bearishLeftTopHeightPct}%` }}>
               <SentimentPanel title="Bullish" rows={grouped.bullish} emptyText={panelEmptyText("bullish")} columns={1} />
@@ -339,7 +334,6 @@ function NewsSummary() {
             orientation="vertical"
             onPointerDown={(e) => beginResizeDrag(e, bearishContainerRef.current, "x", setBearishLeftWidthPct)}
           />
-          {/* Right: Bearish full height */}
           <div className="min-w-0 min-h-0" style={{ width: `${100 - bearishLeftWidthPct}%` }}>
             <SentimentPanel title="Bearish" rows={grouped.bearish} emptyText={panelEmptyText("bearish")} columns={1} />
           </div>
@@ -434,7 +428,7 @@ function SendEmailButton({ dateFrom, dateTo }: { dateFrom: string; dateTo: strin
                   className="ml-1 rounded-full hover:bg-muted-foreground/20 px-1 text-xs"
                   onClick={() => removeRecipient(email)}
                 >
-                  ×
+                  x
                 </button>
               </Badge>
             ))}
@@ -472,64 +466,34 @@ function SentimentPanel(props: {
   emptyText: string
   columns: number
 }) {
-  const visibleRows = props.rows
   const key = props.title.toLowerCase() as SentimentKey
 
   return (
     <Card className={`flex flex-col overflow-hidden h-full p-0 border-2 ${panelBorderClass(key)}`}>
       <div className="px-2 py-1.5 flex-1 overflow-hidden min-h-0">
-        {visibleRows.length === 0 ? (
+        {props.rows.length === 0 ? (
           <div className="py-4 text-center text-sm text-muted-foreground">{props.emptyText}</div>
         ) : (
           <div className="flex h-full min-h-0 flex-col">
             <div className="pb-1">
               <span className={`text-sm font-semibold ${panelTextClass(key)}`}>{props.title}</span>
             </div>
-            <div
-              className="min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-            >
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               <div className={props.columns === 2 ? "grid grid-cols-2 gap-1.5" : "space-y-1.5"}>
-              {visibleRows.map((n) => (
-                <article key={n.id} className="rounded border px-2 py-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex flex-wrap items-center gap-1">
-                        <span className="text-[11px] text-muted-foreground" style={{ fontFamily: "Inter, sans-serif" }}>
-                          {n.source} • {formatTime(n.rtpTimestamp)}
-                        </span>
-                        {n.region.map((region) => (
-                          <Badge key={`region-${n.id}-${region}`} variant="secondary" className="text-[10px] px-1.5 py-0">
-                            {cleanTagValue(region)}
-                          </Badge>
-                        ))}
-                        {n.category.map((category) => (
-                          <Badge key={`category-${n.id}-${category}`} variant="outline" className="text-[10px] px-1.5 py-0">
-                            {cleanTagValue(category)}
-                          </Badge>
-                        ))}
-                      </div>
-                      <h2 className="text-sm font-semibold leading-snug line-clamp-1" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>{n.headline}</h2>
-                      {(n.paragraph_summary || n.summary) && (
-                        <p className="text-xs text-muted-foreground whitespace-pre-wrap wrap-break-word">
-                          {formatHtmlText(n.paragraph_summary || n.summary || "")}
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0 h-6 w-6"
-                      title="Open"
-                      onClick={() => {
-                        if (n.documentUrl) window.open(n.documentUrl, "_blank", "noopener,noreferrer")
-                      }}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </article>
-              ))}
+                {props.rows.map((n) => {
+                  const summaryText = formatHtmlText(n.paragraph_summary || n.summary || "")
+                  const sourceLabel = n.source || "Unknown source"
+
+                  return (
+                    <article key={n.id} className="px-1 py-1">
+                      <p className="text-base leading-6 text-muted-foreground whitespace-pre-wrap wrap-break-word">
+                        <span className="font-semibold text-foreground">• {n.headline}</span>
+                        {summaryText ? ` — ${summaryText}` : ""}
+                        {` (source: ${sourceLabel}. ${formatTime(n.rtpTimestamp)})`}
+                      </p>
+                    </article>
+                  )
+                })}
               </div>
             </div>
           </div>

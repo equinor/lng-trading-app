@@ -210,7 +210,7 @@ def _group_for_email(rows: list[dict], date_from: str | None, date_to: str | Non
 
         grouped[sentiment].append({
             "headline": row.get("headline", ""),
-            "summary": row.get("summary", ""),
+            "summary": row.get("paragraph_summary") or row.get("summary", ""),
             "source": row.get("source", ""),
             "timestamp": _format_ts(row.get("rtpTimestamp")),
             "url": row.get("documentUrl"),

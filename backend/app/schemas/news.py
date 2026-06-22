@@ -13,6 +13,7 @@ class NewsItem(BaseModel):
     category: list[str] = Field(default_factory=list)
     region: list[str] = Field(default_factory=list)
     summary: str | None = None
+    paragraph_summary: str | None = None
     headline: str
     body: str | None = None
     official_sentiment: Sentiment | None = None

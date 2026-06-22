@@ -11,6 +11,7 @@ export type DbNewsRow = {
   category: string[]
   region: string[]
   summary: string | null
+  paragraph_summary: string | null
   headline: string
   body: string | null
   favourited: boolean

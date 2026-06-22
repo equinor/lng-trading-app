@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
 
 from app.core.config import settings
@@ -46,6 +47,7 @@ def seed_if_empty() -> None:
             "category": pick_category(settings.MOCK_NEWS_TAG_NONE_PROBABILITY),
             "region": pick_region(p_none=settings.MOCK_NEWS_REGION_NONE_PROBABILITY),
             "summary": "Mock summary preview...",
+            "paragraph_summary": "Mock paragraph summary preview...",
             "headline": f"LNG headline {i + 1}: market moves",
             "body": "Mock content preview...",
             "official_sentiment": None,
