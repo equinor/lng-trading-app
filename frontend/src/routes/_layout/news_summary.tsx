@@ -509,9 +509,9 @@ function SentimentPanel(props: {
                         ))}
                       </div>
                       <h2 className="text-sm font-semibold leading-snug line-clamp-1" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>{n.headline}</h2>
-                      {n.summary && (
+                      {(n.paragraph_summary || n.summary) && (
                         <p className="text-xs text-muted-foreground line-clamp-1">
-                          {formatHtmlText(n.summary)}
+                          {formatHtmlText(n.paragraph_summary || n.summary || "")}
                         </p>
                       )}
                     </div>
