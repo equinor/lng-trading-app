@@ -479,13 +479,13 @@ function SentimentPanel(props: {
               <span className={`text-sm font-semibold ${panelTextClass(key)}`}>{props.title}</span>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-              <div className={props.columns === 2 ? "grid grid-cols-2 gap-1.5" : "space-y-1.5"}>
+              <div className={props.columns === 2 ? "grid grid-cols-2 gap-0.5" : "space-y-0.5"}>
                 {props.rows.map((n) => {
                   const summaryText = formatHtmlText(n.paragraph_summary || n.summary || "")
                   const sourceLabel = n.source || "Unknown source"
 
                   return (
-                    <article key={n.id} className="px-1 py-1">
+                    <article key={n.id} className="px-1 py-0">
                       <p className="text-base leading-6 text-muted-foreground whitespace-pre-wrap wrap-break-word">
                         <span className="font-semibold text-foreground">• {n.headline}</span>
                         {summaryText ? ` — ${summaryText}` : ""}
