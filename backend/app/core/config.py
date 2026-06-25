@@ -59,6 +59,18 @@ class Settings(BaseSettings):
     AZURE_WORKSPACE_RESOURCE_ID: str | None = None
     DATABRICKS_AAD_SCOPE: str = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/.default"
 
+    # --- Databricks Jobs / pipeline trigger (REST API) ---
+    # Workspace base URL, e.g. "https://adb-1234.5.azuredatabricks.net".
+    # Falls back to DATABRICKS_SERVER_HOSTNAME when unset.
+    DATABRICKS_WORKSPACE_URL: str | None = None
+    # The Databricks Job ID that runs the news ingestion pipeline.
+    DATABRICKS_JOB_ID: str | None = None
+    # TLS verification for Databricks/AAD REST calls. On a corporate network that
+    # intercepts TLS, keep DATABRICKS_VERIFY_SSL=true and set DATABRICKS_CA_BUNDLE
+    # to your company's CA bundle (.pem) so the proxy's chain validates.
+    DATABRICKS_VERIFY_SSL: bool = True
+    DATABRICKS_CA_BUNDLE: str | None = None
+
     # UC table name you are using
     NEWS_TABLE: str = "lng_apac.news_state"
 

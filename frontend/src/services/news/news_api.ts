@@ -85,3 +85,24 @@ export async function sendEmailSummary(recipient: string, dateFrom?: string, dat
     body: { recipient, date_from: dateFrom || null, date_to: dateTo || null },
   })
 }
+
+export type PipelineRunInfo = {
+  configured: boolean
+  run_id: number | null
+  state: string | null
+  result: string | null
+  start_time: string | null
+  end_time: string | null
+  run_url: string | null
+}
+
+export async function getPipelineLastRun(): Promise<PipelineRunInfo> {
+  return apiRequest<PipelineRunInfo>(`${NEWS_BASE}pipeline/last-run`)
+}
+
+export async function triggerPipeline() {
+  return apiRequest<{ ok: boolean; run_id: number | null }>(`${NEWS_BASE}pipeline/trigger`, {
+    method: "POST",
+  })
+}
+

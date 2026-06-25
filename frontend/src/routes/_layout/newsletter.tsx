@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PipelineButton } from "@/components/News/PipelineButton"
 import { formatHtmlText } from "@/lib/utils"
 import {
   getNews,
@@ -301,11 +302,14 @@ function Newsletter() {
   return (
     <div className="flex flex-col gap-6">
       {/* Title */}
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Newsletter</h1>
-        <p className="text-muted-foreground">
-          Live analyst feed (MVP) — favourites, official sentiment, category, region.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight">Newsletter</h1>
+          <p className="text-muted-foreground">
+            Live analyst feed (MVP) — favourites, official sentiment, category, region.
+          </p>
+        </div>
+        <PipelineButton withRunButton />
       </div>
 
       {/* Bloomberg-ish filter toolbar */}

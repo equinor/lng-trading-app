@@ -267,3 +267,34 @@ def send_news_summary_email(body: EmailSummaryBody, bg: BackgroundTasks):
 
     bg.add_task(send_email, email_to=body.recipient, subject="LNG News Summary", html_content=html)
     return {"ok": True, "message": f"Summary email queued for {body.recipient}"}
+
+
+# --- Databricks pipeline ---
+
+
+@router.get("/pipeline/last-run")
+def get_pipeline_last_run():
+    from app.services import databricks_jobs
+
+    try:
+        return databricks_jobs.get_last_run()
+    except Exception as exc:
+        import traceback
+        logger.error("Failed to read Databricks pipeline status: %r", exc)
+        traceback.print_exc()
+        raise HTTPException(status_code=502, detail="Could not read pipeline status") from exc
+
+
+@router.post("/pipeline/trigger")
+def trigger_pipeline():
+    from app.services import databricks_jobs
+
+    try:
+        result = databricks_jobs.trigger_run()
+    except Exception as exc:
+        logger.error("Failed to trigger Databricks pipeline: %s", exc)
+        raise HTTPException(status_code=502, detail="Could not start pipeline") from exc
+
+    _invalidate_news_cache()
+    return result
+
