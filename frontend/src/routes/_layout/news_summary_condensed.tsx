@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 
 import { LayoutSettingsButton } from "@/components/News/LayoutSettingsButton"
+import { PipelineButton } from "@/components/News/PipelineButton"
 import { SendEmailButton } from "@/components/News/SendEmailButton"
 import { SentimentLayout } from "@/components/News/SentimentLayout"
 import { Button } from "@/components/ui/button"
@@ -115,6 +116,8 @@ function NewsSummaryCondensed() {
           LNG market news / sentiment (condensed)
         </h1>
         <div className="flex items-center gap-2">
+          <PipelineButton />
+          <div className="w-px h-5 bg-border mx-1" />
           <LayoutSettingsButton
             layoutType={effectiveLayoutType}
             slots={effectiveSlots}

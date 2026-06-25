@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { ExternalLink } from "lucide-react"
 
 import { LayoutSettingsButton } from "@/components/News/LayoutSettingsButton"
+import { PipelineButton } from "@/components/News/PipelineButton"
 import { SendEmailButton } from "@/components/News/SendEmailButton"
 import { SentimentLayout } from "@/components/News/SentimentLayout"
 import { Badge } from "@/components/ui/badge"
@@ -116,6 +117,8 @@ function NewsSummary() {
       <div className="flex flex-wrap items-center justify-between gap-4 shrink-0">
         <h1 className="text-lg font-bold tracking-tight" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>LNG market news / sentiment </h1>
         <div className="flex items-center gap-2">
+          <PipelineButton />
+          <div className="w-px h-5 bg-border mx-1" />
           <LayoutSettingsButton
             layoutType={effectiveLayoutType}
             slots={effectiveSlots}
