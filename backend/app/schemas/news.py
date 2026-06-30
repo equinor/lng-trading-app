@@ -21,6 +21,7 @@ class NewsItem(BaseModel):
     read: bool | None = None
     source: str | None = None
     updatedDate: datetime | None = None
+    app_updated_at: datetime | None = None
     rtpTimestamp: datetime | None = None
     publishedChannel: str | None = None
     importantStory: str | None = None

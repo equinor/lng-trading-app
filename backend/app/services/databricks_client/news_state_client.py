@@ -35,6 +35,7 @@ class NewsStateDatabricksClient:
                 `read` AS read,
                 `source` AS source,
                 `updatedDate` AS updatedDate,
+                `app_updated_at` AS app_updated_at,
                 `rtpTimestamp` AS rtpTimestamp,
                 `publishedChannel` AS publishedChannel,
                 `importantStory` AS importantStory,
@@ -64,6 +65,7 @@ class NewsStateDatabricksClient:
                 `read` AS read,
                 `source` AS source,
                 `updatedDate` AS updatedDate,
+                `app_updated_at` AS app_updated_at,
                 `rtpTimestamp` AS rtpTimestamp,
                 `publishedChannel` AS publishedChannel,
                 `importantStory` AS importantStory,
@@ -111,7 +113,7 @@ class NewsStateDatabricksClient:
         if not assignments:
             return 0
 
-        assignments.append("`updatedDate` = current_timestamp()")
+        assignments.append("`app_updated_at` = current_timestamp()")
 
         query = f"""
             UPDATE {TABLE}

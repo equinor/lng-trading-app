@@ -55,6 +55,7 @@ def seed_if_empty() -> None:
             "read": False,
             "source": settings.MOCK_NEWS_SOURCE,
             "updatedDate": now,
+            "app_updated_at": now,
             "rtpTimestamp": now,
             "publishedChannel": "Mock Wire",
             "importantStory": "true" if i < 3 else "false",
@@ -117,5 +118,5 @@ def update_article(
     if region is not _UNSET:
         row["region"] = _normalize_multi(region)
 
-    row["updatedDate"] = utcnow()
+    row["app_updated_at"] = utcnow()
     return row

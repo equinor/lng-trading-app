@@ -235,7 +235,7 @@ def _format_ts(ts: str | datetime | None) -> str:
 
 
 @router.post("/email-summary")
-def send_news_summary_email(body: EmailSummaryBody, bg: BackgroundTasks):
+def send_news_summary_email(body: EmailSummaryBody):
     from app.core.config import settings
     if not settings.emails_enabled:
         raise HTTPException(status_code=503, detail="Email not configured (SMTP_HOST is not set)")
@@ -265,10 +265,15 @@ def send_news_summary_email(body: EmailSummaryBody, bg: BackgroundTasks):
         context={"sections": sections, "date_range": date_range},
     )
 
-    bg.add_task(send_email, email_to=body.recipient, subject="LNG News Summary", html_content=html)
-    return {"ok": True, "message": f"Summary email queued for {body.recipient}"}
-
-
+    try:
+        send_email(email_to=body.recipient, subject="LNG News Summary", html_content=html)
+    except Exception as exc:
+        logger.error("Failed to send summary email to %s: %r", body.recipient, exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Email send failed for {body.recipient}: {exc}",
+        )
+    return {"ok": True, "message": f"Summary email sent to {body.recipient}"}
 # --- Databricks pipeline ---
 
 
