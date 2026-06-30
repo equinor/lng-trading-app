@@ -148,6 +148,7 @@ function Newsletter() {
   // UI state
   const [query, setQuery] = useState("")
   const [sentiment, setSentiment] = useState<"All" | "Bullish" | "Bearish" | "Neutral">("All")
+  const [sortMode, setSortMode] = useState<"default" | "newest">("default")
 
   // Filters
   const [favFilter, setFavFilter] = useState<FavFilter>("All")
@@ -292,10 +293,15 @@ function Newsletter() {
       if (a.important_story !== b.important_story) return a.important_story ? -1 : 1
       return +new Date(b.rtpTimestamp ?? 0) - +new Date(a.rtpTimestamp ?? 0)
     }
+    if (sortMode === "newest") {
+      return [...rows].sort(
+        (a, b) => +new Date(b.rtpTimestamp ?? 0) - +new Date(a.rtpTimestamp ?? 0),
+      )
+    }
     const unread = rows.filter((r) => !r.read).sort(sortByImportantThenNewest)
     const read = rows.filter((r) => r.read).sort(sortByImportantThenNewest)
     return [...unread, ...read]
-  }, [normalized, query, favFilter, readFilter, categoryFilter, regionFilter, sentiment, dateFrom, dateTo])
+  }, [normalized, query, favFilter, readFilter, categoryFilter, regionFilter, sentiment, dateFrom, dateTo, sortMode])
 
   const feed = useMemo(() => filtered.slice(0, 100), [filtered])
 
@@ -434,6 +440,30 @@ function Newsletter() {
                 {s}
               </Button>
             ))}
+
+            <div className="hidden md:block h-6 w-px bg-border" />
+
+            <div className="inline-flex items-center gap-2 text-xs text-muted-foreground mr-1">
+              Sort
+            </div>
+            <Button
+              type="button"
+              variant={sortMode === "default" ? "default" : "secondary"}
+              size="sm"
+              className="h-8"
+              onClick={() => setSortMode("default")}
+            >
+              Default
+            </Button>
+            <Button
+              type="button"
+              variant={sortMode === "newest" ? "default" : "secondary"}
+              size="sm"
+              className="h-8"
+              onClick={() => setSortMode("newest")}
+            >
+              Newest first
+            </Button>
           </div>
         </div>
       </div>
