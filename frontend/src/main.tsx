@@ -15,15 +15,14 @@ import { routeTree } from "./routeTree.gen"
 import "antd/dist/reset.css";
 
 OpenAPI.BASE = import.meta.env.VITE_API_URL
-OpenAPI.TOKEN = async () => {
-  return localStorage.getItem("access_token") || ""
-}
+// Auth is handled by the Radix OAuth2 proxy (server-managed session); the
+// browser sends the session cookie automatically, so no token is stored here.
+OpenAPI.TOKEN = async () => ""
 
 const handleApiError = (error: Error) => {
   if (error instanceof ApiError && [401, 403].includes(error.status)) {
-    localStorage.removeItem("access_token")
-    window.location.href = "/login"
-    // console.warn("Auth error ignored in dev:", error.status)
+    // Session expired/invalid — let the Radix proxy re-authenticate the user.
+    window.location.href = "/oauth2/sign_in"
     return
   }
 }

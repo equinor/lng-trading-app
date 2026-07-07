@@ -31,7 +31,7 @@ export type UseNewsLayoutResult = {
  * Behaviour:
  * - Defaults to "auto" mode, deriving the arrangement from the dominant sentiment.
  * - Once the user customises the arrangement or panel assignment it switches to
- *   "custom" mode and is persisted to localStorage under `storageKey`.
+ *   "custom" mode and is persisted to sessionStorage under `storageKey`.
  * - Reverting to automatic clears the persisted value.
  */
 export function useNewsLayout(storageKey: string, dominant: SentimentKey): UseNewsLayoutResult {
@@ -43,7 +43,7 @@ export function useNewsLayout(storageKey: string, dominant: SentimentKey): UseNe
 
   // Load a previously persisted custom layout on mount.
   useEffect(() => {
-    const parsed = readJson<Partial<StoredLayout>>(localStorage, storageKey)
+    const parsed = readJson<Partial<StoredLayout>>(sessionStorage, storageKey)
     if (!parsed || parsed.mode !== "custom") return
 
     setLayoutMode("custom")
@@ -58,11 +58,11 @@ export function useNewsLayout(storageKey: string, dominant: SentimentKey): UseNe
   // Persist the custom layout, or clear it when reverting to automatic.
   useEffect(() => {
     if (layoutMode !== "custom") {
-      removeKey(localStorage, storageKey)
+      removeKey(sessionStorage, storageKey)
       return
     }
     const payload: StoredLayout = { mode: "custom", layoutType, slots, primarySplit, secondarySplit }
-    writeJson(localStorage, storageKey, payload)
+    writeJson(sessionStorage, storageKey, payload)
   }, [storageKey, layoutMode, layoutType, slots, primarySplit, secondarySplit])
 
   const auto = autoLayout(dominant)

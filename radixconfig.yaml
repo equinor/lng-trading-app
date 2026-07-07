@@ -61,7 +61,25 @@ spec:
       environmentConfig:
         - environment: dev
           variables:
-            VITE_BYPASS_AUTH: "true"
+            VITE_BYPASS_AUTH: "false"
+          authentication:
+            oauth2:
+              # Azure AD App Registration (client) ID that fronts the app.
+              clientId: 60283d4b-f774-407b-983b-a22dcfeb6d03
+              scope: "openid profile email"
+              setXAuthRequestHeaders: true
+              setAuthorizationHeader: false
+              sessionStoreType: systemManaged
         - environment: prod
           variables:
             VITE_BYPASS_AUTH: "false"
+          authentication:
+            oauth2:
+              # Azure AD App Registration (client) ID that fronts the app.
+              clientId: 60283d4b-f774-407b-983b-a22dcfeb6d03
+              scope: "openid profile email"
+              # Forward the authenticated identity to the app as
+              # X-Auth-Request-Email / X-Auth-Request-User headers.
+              setXAuthRequestHeaders: true
+              setAuthorizationHeader: false
+              sessionStoreType: systemManaged
