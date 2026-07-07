@@ -6,7 +6,7 @@
 
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 
 from app.core.config import settings
 
@@ -26,13 +26,30 @@ def get_current_user(request: Request) -> dict:
     )
 
     if not email:
-        # No proxy in front (local dev / tests): use a fallback identity.
-        email = DEV_FALLBACK_EMAIL
+        # No proxy in front (local dev / tests): use a fallback identity
+        # and skip the domain restriction so local development still works.
+        return {
+            "email": DEV_FALLBACK_EMAIL,
+            "name": user or DEV_FALLBACK_EMAIL,
+            "is_superuser": DEV_FALLBACK_EMAIL == settings.FIRST_SUPERUSER.strip().lower(),
+        }
+
+    email = email.strip().lower()
+
+    # Restrict access to a single email domain (e.g. equinor.com).
+    # Any authenticated user in this domain gets read access; only the
+    # FIRST_SUPERUSER gets write access.
+    domain = settings.ALLOWED_EMAIL_DOMAIN.strip().lower()
+    if domain and not email.endswith(f"@{domain}"):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access is restricted to @{domain} accounts.",
+        )
 
     return {
         "email": email,
         "name": user or email,
-        "is_superuser": email == settings.FIRST_SUPERUSER,
+        "is_superuser": email == settings.FIRST_SUPERUSER.strip().lower(),
     }
 
 

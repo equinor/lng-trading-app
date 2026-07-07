@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     # Keep a secret key if anything uses it (cookies/signing later)
     SECRET_KEY: str = secrets.token_urlsafe(32)
 
+    # --- Access control ---
+    # Email that is granted superuser (write) access.
+    FIRST_SUPERUSER: str = "admin@example.com"
+    # Only users whose email ends with this domain may access the app.
+    # Set to "" to allow any authenticated email.
+    ALLOWED_EMAIL_DOMAIN: str = "equinor.com"
+
     # --- CORS ---
     FRONTEND_HOST: str = "http://localhost:5173"
     BACKEND_CORS_ORIGINS: Annotated[list[AnyUrl] | str, BeforeValidator(parse_cors)] = []
