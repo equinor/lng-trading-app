@@ -30,6 +30,9 @@ class NewsItem(BaseModel):
 
 class NewsListResponse(BaseModel):
     data: list[NewsItem]
+    total: int | None = None
+    limit: int | None = None
+    offset: int | None = None
 
 
 class SetFavouriteBody(BaseModel):

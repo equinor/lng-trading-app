@@ -50,9 +50,15 @@ def _normalize_db_row(row: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def list_news(limit: int = 100, favourited: bool | None = None) -> list[dict[str, Any]]:
-    rows = NewsStateDatabricksClient.list_rows(limit=limit, favourited=favourited)
+def list_news(
+    limit: int = 100, favourited: bool | None = None, offset: int = 0
+) -> list[dict[str, Any]]:
+    rows = NewsStateDatabricksClient.list_rows(limit=limit, favourited=favourited, offset=offset)
     return [_normalize_db_row(row) for row in rows]
+
+
+def count_news(favourited: bool | None = None) -> int:
+    return NewsStateDatabricksClient.count_rows(favourited=favourited)
 
 
 def get_article(article_id: int) -> dict[str, Any]:

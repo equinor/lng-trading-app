@@ -19,7 +19,9 @@ class NewsStateDatabricksClient:
     )
 
     @staticmethod
-    def list_rows(limit: int = 100, favourited: bool | None = None) -> list[dict[str, Any]]:
+    def list_rows(
+        limit: int = 100, favourited: bool | None = None, offset: int = 0
+    ) -> list[dict[str, Any]]:
         query = f"""
             SELECT
                 `id` AS id,
@@ -44,9 +46,23 @@ class NewsStateDatabricksClient:
             WHERE (? IS NULL OR `favourited` = ?)
             ORDER BY {NewsStateDatabricksClient.IMPORTANT_STORY_ORDER} DESC,
                      COALESCE(`rtpTimestamp`, `updatedDate`) DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
         """
-        return fetch_all(query, [favourited, favourited, limit])
+        return fetch_all(query, [favourited, favourited, limit, max(0, offset)])
+
+    @staticmethod
+    def count_rows(favourited: bool | None = None) -> int:
+        query = f"""
+            SELECT count(*) AS c
+            FROM {TABLE}
+            WHERE (? IS NULL OR `favourited` = ?)
+        """
+        rows = fetch_all(query, [favourited, favourited])
+        if not rows:
+            return 0
+        value = rows[0].get("c", 0)
+        return int(value or 0)
+
 
     @staticmethod
     def get_row(article_id: int) -> dict[str, Any] | None:

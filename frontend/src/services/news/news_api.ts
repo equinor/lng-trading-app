@@ -35,7 +35,7 @@ export function isImportantStory(value: string | null): boolean {
   return ["true", "1", "yes", "y", "important"].includes(value.trim().toLowerCase())
 }
 
-type NewsListResponse = { data: DbNewsRow[] }
+type NewsListResponse = { data: DbNewsRow[]; total?: number; limit?: number; offset?: number }
 
 export async function getNews(limit = 200, favouritedOnly = false): Promise<DbNewsRow[]> {
   const res = await apiRequest<NewsListResponse>(NEWS_BASE, {
@@ -45,6 +45,26 @@ export async function getNews(limit = 200, favouritedOnly = false): Promise<DbNe
     },
   })
   return res.data ?? []
+}
+
+export type NewsPage = { data: DbNewsRow[]; total: number; limit: number; offset: number }
+
+/** Paginated news fetch. `offset`/`limit` map to the backend's offset pagination. */
+export async function getNewsPage(limit = 25, offset = 0, favouritedOnly = false): Promise<NewsPage> {
+  const res = await apiRequest<NewsListResponse>(NEWS_BASE, {
+    query: {
+      limit: String(limit),
+      offset: String(offset),
+      favourited_only: favouritedOnly ? "true" : "false",
+    },
+  })
+  const data = res.data ?? []
+  return {
+    data,
+    total: res.total ?? data.length,
+    limit: res.limit ?? limit,
+    offset: res.offset ?? offset,
+  }
 }
 
 export async function patchFavourite(articleId: number, favourited: boolean) {

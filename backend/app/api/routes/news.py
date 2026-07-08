@@ -105,18 +105,33 @@ def _invalidate_news_cache() -> None:
 
 
 @router.get("/", response_model=NewsListResponse)
-def list_news(limit: int = 200, favourited_only: bool = False):
+def list_news(limit: int = 200, offset: int = 0, favourited_only: bool = False):
     global _news_cache, _news_cache_ts
     now = time.monotonic()
-    # Only cache the default unfavourited full list — other variants go straight to DB
-    use_cache = not favourited_only and limit == 200
+    limit = max(1, min(limit, 1000))
+    offset = max(0, offset)
+    favourited = True if favourited_only else None
+    total = news_repo.count_news(favourited=favourited)
+
+    # Only cache the default unfavourited first page — other variants go straight to DB
+    use_cache = not favourited_only and limit == 200 and offset == 0
     if use_cache and _news_cache is not None and (now - _news_cache_ts) < _NEWS_CACHE_TTL:
-        return {"data": _apply_pending_overrides(_news_cache)}
-    rows = news_repo.list_news(limit=limit, favourited=True if favourited_only else None)
+        return {
+            "data": _apply_pending_overrides(_news_cache),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+    rows = news_repo.list_news(limit=limit, favourited=favourited, offset=offset)
     if use_cache:
         _news_cache = rows
         _news_cache_ts = now
-    return {"data": _apply_pending_overrides(rows)}
+    return {
+        "data": _apply_pending_overrides(rows),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 def _bg_update(article_id: int, kwargs: dict) -> None:

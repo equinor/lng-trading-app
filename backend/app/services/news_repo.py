@@ -11,6 +11,7 @@ BACKEND = getattr(settings, "NEWS_BACKEND", "mock").lower()
 if BACKEND == "databricks":
     # later you will implement this file with real SQL Warehouse calls
     from app.services.news_repo_databricks import (  # type: ignore
+        count_news,
         get_article,
         list_news,
         update_article,
@@ -18,9 +19,10 @@ if BACKEND == "databricks":
 else:
     # your current in-memory mock
     from app.services.mock.news_service import (
+        count_news,
         get_article,
         list_news,
         update_article,
     )
 
-__all__ = ["list_news", "get_article", "update_article"]
+__all__ = ["list_news", "count_news", "get_article", "update_article"]

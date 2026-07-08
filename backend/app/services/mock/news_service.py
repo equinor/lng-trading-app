@@ -63,7 +63,17 @@ def seed_if_empty() -> None:
         }
 
 
-def list_news(limit: int = 100, favourited: bool | None = None) -> list[dict]:
+def list_news(limit: int = 100, favourited: bool | None = None, offset: int = 0) -> list[dict]:
+    rows = _sorted_rows(favourited)
+    start = max(0, offset)
+    return rows[start : start + limit]
+
+
+def count_news(favourited: bool | None = None) -> int:
+    return len(_sorted_rows(favourited))
+
+
+def _sorted_rows(favourited: bool | None = None) -> list[dict]:
     seed_if_empty()
     rows = list(_STORE.values())
     rows.sort(
@@ -77,7 +87,7 @@ def list_news(limit: int = 100, favourited: bool | None = None) -> list[dict]:
     if favourited is not None:
         rows = [r for r in rows if r.get("favourited") == favourited]
 
-    return rows[:limit]
+    return rows
 
 
 def get_article(article_id: int) -> dict:

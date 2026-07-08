@@ -303,7 +303,20 @@ function Newsletter() {
     return [...unread, ...read]
   }, [normalized, query, favFilter, readFilter, categoryFilter, regionFilter, sentiment, dateFrom, dateTo, sortMode])
 
-  const feed = useMemo(() => filtered.slice(0, 100), [filtered])
+  const PAGE_SIZE = 25
+  const [page, setPage] = useState(1)
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+
+  // Reset to the first page whenever the filtered result set changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally resets page when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [filtered])
+
+  const feed = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page],
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -660,6 +673,37 @@ function Newsletter() {
                       </div>
                     </article>
                   ))}
+                </div>
+              )}
+
+              {filtered.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 mt-2">
+                  <span className="text-xs text-muted-foreground">
+                    Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Page {page} of {pageCount}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= pageCount}
+                      onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
