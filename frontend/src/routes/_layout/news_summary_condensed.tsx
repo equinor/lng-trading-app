@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useDateFilter } from "@/hooks/useDateFilter"
 import { useEquinorFont } from "@/hooks/useEquinorFont"
+import { useHiddenArticles } from "@/hooks/useHiddenArticles"
 import { useNewsLayout } from "@/hooks/useNewsLayout"
 import { formatHtmlText } from "@/lib/utils"
 import { getNews } from "@/services/news/news_api"
@@ -34,7 +35,7 @@ import {
   type RowWithReadTime,
 } from "@/services/news/news_layout"
 
-const LAYOUT_STORAGE_KEY = "news-summary-condensed-layout-v1"
+const LAYOUT_STORAGE_KEY = "news-summary-layout-v1"
 
 function getFavouritedNewsQueryOptions() {
   return {
@@ -75,14 +76,21 @@ function NewsSummaryCondensedRoute() {
 function NewsSummaryCondensed() {
   useEquinorFont()
 
-  const { dateFrom, setDateFrom, dateTo, setDateTo, resetDates } = useDateFilter("news-summary-condensed", 7)
+  const { dateFrom, setDateFrom, dateTo, setDateTo, resetDates } = useDateFilter("news-summary", 7)
 
   const newsQuery = useQuery(getFavouritedNewsQueryOptions())
   const data = newsQuery.data
 
-  const grouped = useMemo(() => groupNews(data, dateFrom, dateTo), [data, dateFrom, dateTo])
+  // Hidden articles are omitted entirely from the condensed view.
+  const hidden = useHiddenArticles()
+  const visibleData = useMemo(
+    () => (data ?? []).filter((n) => !hidden.isHidden(n.id)),
+    [data, hidden.isHidden],
+  )
+
+  const grouped = useMemo(() => groupNews(visibleData, dateFrom, dateTo), [visibleData, dateFrom, dateTo])
   const dominant = dominantSentiment(grouped)
-  const categoryOptions = useMemo(() => availableCategories(data), [data])
+  const categoryOptions = useMemo(() => availableCategories(visibleData), [visibleData])
 
   const layout = useNewsLayout(LAYOUT_STORAGE_KEY, dominant)
   const {
@@ -98,10 +106,10 @@ function NewsSummaryCondensed() {
   const categoryRows = useMemo(() => {
     const map: Record<string, RowWithReadTime[]> = {}
     for (const value of layout.categories) {
-      map[value] = groupByCategory(data, dateFrom, dateTo, value)
+      map[value] = groupByCategory(visibleData, dateFrom, dateTo, value)
     }
     return map
-  }, [data, dateFrom, dateTo, layout.categories])
+  }, [visibleData, dateFrom, dateTo, layout.categories])
 
   const renderPanel = (panel: PanelDescriptor, columns: number) => {
     if (panel.kind === "sentiment") {

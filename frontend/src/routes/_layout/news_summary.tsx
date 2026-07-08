@@ -1,9 +1,10 @@
 // frontend/src/routes/_layout/news_summary.tsx
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
-import { useQuery } from "@tanstack/react-query"
-import { ExternalLink } from "lucide-react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { ExternalLink, SlidersHorizontal } from "lucide-react"
 
+import { ArticleEditPanel } from "@/components/News/ArticleEditPanel"
 import { LayoutSettingsButton } from "@/components/News/LayoutSettingsButton"
 import { GridSectionLayout } from "@/components/News/GridSectionLayout"
 import { PipelineButton } from "@/components/News/PipelineButton"
@@ -16,6 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useDateFilter } from "@/hooks/useDateFilter"
 import { useEquinorFont } from "@/hooks/useEquinorFont"
+import { useHiddenArticles } from "@/hooks/useHiddenArticles"
 import { useNewsLayout } from "@/hooks/useNewsLayout"
 import { formatHtmlText } from "@/lib/utils"
 import { getNews } from "@/services/news/news_api"
@@ -86,6 +88,13 @@ function NewsSummary() {
   const dominant = dominantSentiment(grouped)
   const categoryOptions = useMemo(() => availableCategories(data), [data])
 
+  const queryClient = useQueryClient()
+  const hidden = useHiddenArticles()
+  const handlePatched = () => {
+    queryClient.invalidateQueries({ queryKey: ["news_summary"] })
+    queryClient.invalidateQueries({ queryKey: ["news_summary_condensed"] })
+  }
+
   const layout = useNewsLayout(LAYOUT_STORAGE_KEY, dominant)
   const {
     effectiveLayoutType,
@@ -115,6 +124,9 @@ function NewsSummary() {
           columns={columns}
           borderClass={panelBorderClass(panel.key)}
           textClass={panelTextClass(panel.key)}
+          isHidden={hidden.isHidden}
+          onToggleHidden={hidden.toggleHidden}
+          onPatched={handlePatched}
         />
       )
     }
@@ -128,6 +140,9 @@ function NewsSummary() {
         columns={columns}
         borderClass={categoryBorderClass(index)}
         textClass={categoryTextClass(index)}
+        isHidden={hidden.isHidden}
+        onToggleHidden={hidden.toggleHidden}
+        onPatched={handlePatched}
       />
     )
   }
@@ -230,8 +245,12 @@ function SummaryPanel(props: {
   columns: number
   borderClass: string
   textClass: string
+  isHidden: (id: number) => boolean
+  onToggleHidden: (id: number) => void
+  onPatched: () => void
 }) {
   const visibleRows = props.rows
+  const [expandedId, setExpandedId] = useState<number | null>(null)
 
   return (
     <Card className={`flex flex-col overflow-hidden h-full p-0 border-2 ${props.borderClass}`}>
@@ -248,7 +267,7 @@ function SummaryPanel(props: {
             >
               <div className={props.columns === 2 ? "grid grid-cols-2 gap-1.5" : "space-y-1.5"}>
               {visibleRows.map((n) => (
-                <article key={n.id} className="rounded border px-2 py-1">
+                <article key={n.id} className={`rounded border px-2 py-1 ${props.isHidden(n.id) ? "opacity-50" : ""}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 space-y-0.5">
                       <div className="flex flex-wrap items-center gap-1">
@@ -273,19 +292,40 @@ function SummaryPanel(props: {
                         </p>
                       )}
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0 h-6 w-6"
-                      title="Open"
-                      onClick={() => {
-                        if (n.documentUrl) window.open(n.documentUrl, "_blank", "noopener,noreferrer")
-                      }}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        title="Edit"
+                        aria-expanded={expandedId === n.id}
+                        onClick={() => setExpandedId((prev) => (prev === n.id ? null : n.id))}
+                      >
+                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        title="Open"
+                        onClick={() => {
+                          if (n.documentUrl) window.open(n.documentUrl, "_blank", "noopener,noreferrer")
+                        }}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
+                  {expandedId === n.id && (
+                    <ArticleEditPanel
+                      article={n}
+                      isHidden={props.isHidden(n.id)}
+                      onToggleHidden={() => props.onToggleHidden(n.id)}
+                      onPatched={props.onPatched}
+                    />
+                  )}
                 </article>
               ))}
               </div>
