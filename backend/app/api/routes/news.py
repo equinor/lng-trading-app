@@ -167,6 +167,7 @@ class EmailSummaryBody(BaseModel):
     recipient: EmailStr
     date_from: str | None = None  # YYYY-MM-DD
     date_to: str | None = None  # YYYY-MM-DD
+    categories: list[str] = Field(default_factory=list)  # extra category sections (on top)
 
 
 SENTIMENT_COLORS = {
@@ -175,50 +176,91 @@ SENTIMENT_COLORS = {
     "neutral": "#2563eb",
 }
 
+# Cycled through for the optional category sections shown above the sentiment ones.
+CATEGORY_COLORS = ["#7c3aed", "#0891b2", "#d97706"]
 
-def _group_for_email(rows: list[dict], date_from: str | None, date_to: str | None) -> dict:
+
+def _email_range(date_from: str | None, date_to: str | None) -> tuple[float | None, float | None]:
     from_ts = datetime.strptime(date_from, "%Y-%m-%d").timestamp() * 1000 if date_from else None
     to_ts = (datetime.strptime(date_to, "%Y-%m-%d").timestamp() + 86399) * 1000 if date_to else None
+    return from_ts, to_ts
+
+
+def _fav_in_range(row: dict, from_ts: float | None, to_ts: float | None) -> bool:
+    fav = row.get("favourited")
+    if not (fav is True or str(fav).lower() == "true"):
+        return False
+
+    ts = row.get("rtpTimestamp")
+    if ts:
+        if isinstance(ts, str):
+            try:
+                ts_ms = datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000
+            except (ValueError, TypeError):
+                ts_ms = 0
+        elif isinstance(ts, datetime):
+            ts_ms = ts.timestamp() * 1000
+        else:
+            ts_ms = float(ts)
+        if from_ts and ts_ms < from_ts:
+            return False
+        if to_ts and ts_ms > to_ts:
+            return False
+
+    return True
+
+
+def _email_article(row: dict) -> dict:
+    return {
+        "headline": row.get("headline", ""),
+        "summary": row.get("paragraph_summary") or row.get("summary", ""),
+        "source": row.get("source", ""),
+        "timestamp": _format_ts(row.get("rtpTimestamp")),
+        "url": row.get("documentUrl"),
+        "regions": row.get("region", []) or [],
+        "categories": row.get("category", []) or [],
+    }
+
+
+def _group_for_email(rows: list[dict], date_from: str | None, date_to: str | None) -> dict:
+    from_ts, to_ts = _email_range(date_from, date_to)
 
     grouped: dict[str, list] = {"bullish": [], "bearish": [], "neutral": []}
     for row in rows:
-        # Only favourited articles
-        fav = row.get("favourited")
-        if not (fav is True or str(fav).lower() == "true"):
+        if not _fav_in_range(row, from_ts, to_ts):
             continue
 
-        # Date filter
-        ts = row.get("rtpTimestamp")
-        if ts:
-            if isinstance(ts, str):
-                try:
-                    ts_ms = datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000
-                except (ValueError, TypeError):
-                    ts_ms = 0
-            elif isinstance(ts, datetime):
-                ts_ms = ts.timestamp() * 1000
-            else:
-                ts_ms = float(ts)
-            if from_ts and ts_ms < from_ts:
-                continue
-            if to_ts and ts_ms > to_ts:
-                continue
-
-        sentiment = (row.get("official_sentiment") or "neutral").lower()
+        raw_sentiment = row.get("official_sentiment")
+        if not raw_sentiment:
+            continue
+        sentiment = raw_sentiment.lower()
         if sentiment not in grouped:
-            sentiment = "neutral"
+            continue
 
-        grouped[sentiment].append({
-            "headline": row.get("headline", ""),
-            "summary": row.get("paragraph_summary") or row.get("summary", ""),
-            "source": row.get("source", ""),
-            "timestamp": _format_ts(row.get("rtpTimestamp")),
-            "url": row.get("documentUrl"),
-            "regions": row.get("region", []) or [],
-            "categories": row.get("category", []) or [],
-        })
+        grouped[sentiment].append(_email_article(row))
 
     return grouped
+
+
+def _category_sections(
+    rows: list[dict], date_from: str | None, date_to: str | None, categories: list[str]
+) -> list[dict]:
+    from_ts, to_ts = _email_range(date_from, date_to)
+    sections: list[dict] = []
+    for index, category in enumerate(categories[:3]):
+        if not category:
+            continue
+        articles = [
+            _email_article(row)
+            for row in rows
+            if _fav_in_range(row, from_ts, to_ts) and category in (row.get("category") or [])
+        ]
+        sections.append({
+            "title": category,
+            "color": CATEGORY_COLORS[index % len(CATEGORY_COLORS)],
+            "articles": articles,
+        })
+    return sections
 
 
 def _format_ts(ts: str | datetime | None) -> str:
@@ -235,7 +277,7 @@ def _format_ts(ts: str | datetime | None) -> str:
 
 
 @router.post("/email-summary")
-def send_news_summary_email(body: EmailSummaryBody):
+def send_news_summary_email(body: EmailSummaryBody, bg: BackgroundTasks):
     from app.core.config import settings
     if not settings.emails_enabled:
         raise HTTPException(status_code=503, detail="Email not configured (SMTP_HOST is not set)")
@@ -254,6 +296,7 @@ def send_news_summary_email(body: EmailSummaryBody):
         date_range = "All dates"
 
     sections = [
+        *_category_sections(rows, body.date_from, body.date_to, body.categories),
         {"title": "Bullish", "color": SENTIMENT_COLORS["bullish"], "articles": grouped["bullish"]},
         {"title": "Bearish", "color": SENTIMENT_COLORS["bearish"], "articles": grouped["bearish"]},
         {"title": "Neutral", "color": SENTIMENT_COLORS["neutral"], "articles": grouped["neutral"]},
@@ -265,15 +308,10 @@ def send_news_summary_email(body: EmailSummaryBody):
         context={"sections": sections, "date_range": date_range},
     )
 
-    try:
-        send_email(email_to=body.recipient, subject="LNG News Summary", html_content=html)
-    except Exception as exc:
-        logger.error("Failed to send summary email to %s: %r", body.recipient, exc)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Email send failed for {body.recipient}: {exc}",
-        )
-    return {"ok": True, "message": f"Summary email sent to {body.recipient}"}
+    bg.add_task(send_email, email_to=body.recipient, subject="LNG News Summary", html_content=html)
+    return {"ok": True, "message": f"Summary email queued for {body.recipient}"}
+
+
 # --- Databricks pipeline ---
 
 

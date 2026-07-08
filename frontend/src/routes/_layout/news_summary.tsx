@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { ExternalLink } from "lucide-react"
 
 import { LayoutSettingsButton } from "@/components/News/LayoutSettingsButton"
+import { GridSectionLayout } from "@/components/News/GridSectionLayout"
 import { PipelineButton } from "@/components/News/PipelineButton"
 import { SendEmailButton } from "@/components/News/SendEmailButton"
 import { SentimentLayout } from "@/components/News/SentimentLayout"
@@ -20,14 +21,19 @@ import { formatHtmlText } from "@/lib/utils"
 import { getNews } from "@/services/news/news_api"
 import { cleanTagValue, formatTime } from "@/services/news/news_utils"
 import {
+  availableCategories,
+  categoryBorderClass,
+  categoryTextClass,
+  categoryTitle,
   dominantSentiment,
+  groupByCategory,
   groupNews,
   panelBorderClass,
   panelEmptyText,
   panelTextClass,
   SENTIMENT_TITLES,
+  type PanelDescriptor,
   type RowWithReadTime,
-  type SentimentKey,
 } from "@/services/news/news_layout"
 
 const LAYOUT_STORAGE_KEY = "news-summary-layout-v1"
@@ -78,6 +84,7 @@ function NewsSummary() {
 
   const grouped = useMemo(() => groupNews(data, dateFrom, dateTo), [data, dateFrom, dateTo])
   const dominant = dominantSentiment(grouped)
+  const categoryOptions = useMemo(() => availableCategories(data), [data])
 
   const layout = useNewsLayout(LAYOUT_STORAGE_KEY, dominant)
   const {
@@ -90,14 +97,40 @@ function NewsSummary() {
     setSecondarySplit,
   } = layout
 
-  const renderPanel = (key: SentimentKey, columns: number) => (
-    <SentimentPanel
-      title={SENTIMENT_TITLES[key]}
-      rows={grouped[key]}
-      emptyText={panelEmptyText(key)}
-      columns={columns}
-    />
-  )
+  const categoryRows = useMemo(() => {
+    const map: Record<string, RowWithReadTime[]> = {}
+    for (const value of layout.categories) {
+      map[value] = groupByCategory(data, dateFrom, dateTo, value)
+    }
+    return map
+  }, [data, dateFrom, dateTo, layout.categories])
+
+  const renderPanel = (panel: PanelDescriptor, columns: number) => {
+    if (panel.kind === "sentiment") {
+      return (
+        <SummaryPanel
+          title={SENTIMENT_TITLES[panel.key]}
+          rows={grouped[panel.key]}
+          emptyText={panelEmptyText(panel.key)}
+          columns={columns}
+          borderClass={panelBorderClass(panel.key)}
+          textClass={panelTextClass(panel.key)}
+        />
+      )
+    }
+    const index = layout.categories.indexOf(panel.value)
+    const title = categoryTitle(panel.value)
+    return (
+      <SummaryPanel
+        title={title}
+        rows={categoryRows[panel.value] ?? []}
+        emptyText={`No favourited articles tagged ${title}.`}
+        columns={columns}
+        borderClass={categoryBorderClass(index)}
+        textClass={categoryTextClass(index)}
+      />
+    )
+  }
 
   // Prevent outdated cached content from flashing before a fresh GET returns.
   if (!newsQuery.isFetchedAfterMount) {
@@ -126,8 +159,15 @@ function NewsSummary() {
             onSelectLayout={layout.selectLayout}
             onSetSlot={layout.setSlot}
             onReset={layout.resetLayout}
+            availableCategories={categoryOptions}
+            categories={layout.categories}
+            onAddCategory={layout.addCategory}
+            onRemoveCategory={layout.removeCategory}
+            isGrid={layout.isGrid}
+            gridRows={layout.gridRows}
+            onSelectGridArrangement={layout.selectGridArrangement}
           />
-          <SendEmailButton dateFrom={dateFrom} dateTo={dateTo} />
+          <SendEmailButton dateFrom={dateFrom} dateTo={dateTo} categories={layout.categories} />
           <div className="w-px h-5 bg-border mx-1" />
           <Input
             type="date"
@@ -156,37 +196,52 @@ function NewsSummary() {
         </div>
       </div>
 
-      <SentimentLayout
-        layoutType={effectiveLayoutType}
-        slots={effectiveSlots}
-        primarySplit={primarySplit}
-        setPrimarySplit={setPrimarySplit}
-        secondarySplit={secondarySplit}
-        setSecondarySplit={setSecondarySplit}
-        renderPanel={renderPanel}
-      />
+      {layout.isGrid ? (
+        <GridSectionLayout
+          panels={layout.panels}
+          rows={layout.gridRows}
+          rowSplits={layout.rowSplits}
+          setRowSplits={layout.setRowSplits}
+          colSplits={layout.colSplits}
+          setColSplits={layout.setColSplits}
+          onSwap={layout.swapPanels}
+          renderPanel={renderPanel}
+        />
+      ) : (
+        <SentimentLayout
+          layoutType={effectiveLayoutType}
+          slots={effectiveSlots}
+          primarySplit={primarySplit}
+          setPrimarySplit={setPrimarySplit}
+          secondarySplit={secondarySplit}
+          setSecondarySplit={setSecondarySplit}
+          onSwap={layout.swapPanels}
+          renderPanel={(key, columns) => renderPanel({ kind: "sentiment", key }, columns)}
+        />
+      )}
     </div>
   )
 }
 
-function SentimentPanel(props: {
-  title: "Bullish" | "Bearish" | "Neutral"
+function SummaryPanel(props: {
+  title: string
   rows: RowWithReadTime[]
   emptyText: string
   columns: number
+  borderClass: string
+  textClass: string
 }) {
   const visibleRows = props.rows
-  const key = props.title.toLowerCase() as SentimentKey
 
   return (
-    <Card className={`flex flex-col overflow-hidden h-full p-0 border-2 ${panelBorderClass(key)}`}>
+    <Card className={`flex flex-col overflow-hidden h-full p-0 border-2 ${props.borderClass}`}>
       <div className="px-2 py-1.5 flex-1 overflow-hidden min-h-0">
         {visibleRows.length === 0 ? (
           <div className="py-4 text-center text-sm text-muted-foreground">{props.emptyText}</div>
         ) : (
           <div className="flex h-full min-h-0 flex-col">
             <div className="pb-1">
-              <span className={`text-sm font-semibold ${panelTextClass(key)}`}>{props.title}</span>
+              <span className={`text-sm font-semibold ${props.textClass}`}>{props.title}</span>
             </div>
             <div
               className="min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"

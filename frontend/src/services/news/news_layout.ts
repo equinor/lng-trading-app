@@ -5,7 +5,7 @@
 // reuse and test.
 
 import type { DbNewsRow } from "./news_api"
-import { readTimeMinFromContent } from "./news_utils"
+import { cleanTagValue, readTimeMinFromContent } from "./news_utils"
 
 export type SentimentKey = "bullish" | "bearish" | "neutral"
 export type RowWithReadTime = DbNewsRow & { readTimeMin: number }
@@ -15,12 +15,85 @@ export type LayoutType = "left-big" | "right-big" | "top-big" | "bottom-big" | "
 export type LayoutMode = "auto" | "custom"
 export type SentimentSlots = [SentimentKey, SentimentKey, SentimentKey]
 
+/** A panel in a summary layout: either a sentiment bucket or a category bucket. */
+export type PanelDescriptor =
+  | { kind: "sentiment"; key: SentimentKey }
+  | { kind: "category"; value: string }
+
+/** Stable string identity for a panel (used for drag-and-drop and React keys). */
+export function panelKeyOf(panel: PanelDescriptor): string {
+  return panel.kind === "sentiment" ? panel.key : `cat:${panel.value}`
+}
+
+/** Reconstruct a panel descriptor from its key. */
+export function panelFromKey(key: string): PanelDescriptor {
+  return key.startsWith("cat:")
+    ? { kind: "category", value: key.slice(4) }
+    : { kind: "sentiment", key: key as SentimentKey }
+}
+
+/** Maximum number of extra category sections a user may add on top of the 3 sentiment sections. */
+export const MAX_CATEGORY_SECTIONS = 3
+
 export type StoredLayout = {
   mode: LayoutMode
   layoutType: LayoutType
   slots: SentimentSlots
   primarySplit: number
   secondarySplit: number
+  categories?: string[]
+  gridRows?: number[]
+  gridOrder?: string[]
+  rowSplits?: number[]
+  colSplits?: number[][]
+}
+
+// --- Category panel presentation ---------------------------------------------
+
+const CATEGORY_PANEL_STYLES: { border: string; text: string }[] = [
+  { border: "border-violet-600 dark:border-violet-400", text: "text-violet-700 dark:text-violet-400" },
+  { border: "border-cyan-600 dark:border-cyan-400", text: "text-cyan-700 dark:text-cyan-400" },
+  { border: "border-amber-600 dark:border-amber-400", text: "text-amber-700 dark:text-amber-400" },
+]
+
+export function categoryBorderClass(index: number): string {
+  return CATEGORY_PANEL_STYLES[index % CATEGORY_PANEL_STYLES.length].border
+}
+
+export function categoryTextClass(index: number): string {
+  return CATEGORY_PANEL_STYLES[index % CATEGORY_PANEL_STYLES.length].text
+}
+
+export function categoryTitle(value: string): string {
+  return cleanTagValue(value)
+}
+
+// --- Grid arrangements for 4-6 panels ----------------------------------------
+
+/** Row shapes (panels per row) available for a given total panel count. */
+export function gridArrangementsFor(count: number): number[][] {
+  if (count === 4) return [[2, 2]]
+  if (count === 5) return [[2, 3], [3, 2]]
+  if (count === 6) return [[3, 3], [2, 2, 2]]
+  return [[count]]
+}
+
+export function defaultGridRows(count: number): number[] {
+  return gridArrangementsFor(count)[0]
+}
+
+/** Even splits (percentages summing to 100) for `n` cells. */
+export function evenSplits(n: number): number[] {
+  if (n <= 0) return []
+  return Array.from({ length: n }, () => 100 / n)
+}
+
+/** Default row heights + per-row column widths for a grid arrangement. */
+export function defaultGridSplits(rows: number[]): { rowSplits: number[]; colSplits: number[][] } {
+  return {
+    rowSplits: evenSplits(rows.length),
+    colSplits: rows.map((cols) => evenSplits(cols)),
+  }
 }
 
 export const SENTIMENT_TITLES: Record<SentimentKey, "Bullish" | "Bearish" | "Neutral"> = {
@@ -84,12 +157,12 @@ export function toTimestampMillis(value: string | null | undefined): number {
   return Number.isFinite(t) ? t : 0
 }
 
-/** Filter favourited rows by an optional date range, group by sentiment and sort newest-first. */
-export function groupNews(
+/** Filter favourited rows by an optional date range. */
+export function filterFavourited(
   rows: DbNewsRow[] | undefined,
   dateFrom: string,
   dateTo: string,
-): GroupedRows {
+): DbNewsRow[] {
   let fav = (rows ?? []).filter((x) => toBool(x.favourited))
 
   if (dateFrom || dateTo) {
@@ -104,6 +177,20 @@ export function groupNews(
     })
   }
 
+  return fav
+}
+
+const sortNewestFirst = (a: DbNewsRow, b: DbNewsRow) =>
+  toTimestampMillis(b.rtpTimestamp) - toTimestampMillis(a.rtpTimestamp)
+
+/** Filter favourited rows by an optional date range, group by sentiment and sort newest-first. */
+export function groupNews(
+  rows: DbNewsRow[] | undefined,
+  dateFrom: string,
+  dateTo: string,
+): GroupedRows {
+  const fav = filterFavourited(rows, dateFrom, dateTo)
+
   const bullish: RowWithReadTime[] = []
   const bearish: RowWithReadTime[] = []
   const neutral: RowWithReadTime[] = []
@@ -115,14 +202,37 @@ export function groupNews(
     else neutral.push(row)
   }
 
-  const sortNewestFirst = (a: DbNewsRow, b: DbNewsRow) =>
-    toTimestampMillis(b.rtpTimestamp) - toTimestampMillis(a.rtpTimestamp)
-
   return {
     bullish: [...bullish].sort(sortNewestFirst),
     bearish: [...bearish].sort(sortNewestFirst),
     neutral: [...neutral].sort(sortNewestFirst),
   }
+}
+
+/** Favourited articles tagged with `category`, newest-first. */
+export function groupByCategory(
+  rows: DbNewsRow[] | undefined,
+  dateFrom: string,
+  dateTo: string,
+  category: string,
+): RowWithReadTime[] {
+  const fav = filterFavourited(rows, dateFrom, dateTo)
+  return fav
+    .filter((n) => (n.category ?? []).includes(category))
+    .map((n) => ({ ...n, readTimeMin: readTimeMinFromContent(n.body) }))
+    .sort(sortNewestFirst)
+}
+
+/** Distinct category values present across favourited rows, sorted alphabetically. */
+export function availableCategories(rows: DbNewsRow[] | undefined): string[] {
+  const seen = new Set<string>()
+  for (const n of (rows ?? []).filter((x) => toBool(x.favourited))) {
+    for (const c of n.category ?? []) {
+      const value = String(c).trim()
+      if (value) seen.add(value)
+    }
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b))
 }
 
 /** The sentiment with the most articles (ties favour bullish, then bearish). */

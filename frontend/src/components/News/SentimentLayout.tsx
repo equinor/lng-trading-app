@@ -1,6 +1,7 @@
 // frontend/src/components/News/SentimentLayout.tsx
 import { type ReactNode, useRef } from "react"
 
+import { DraggablePanel } from "@/components/News/DraggablePanel"
 import { beginResizeDrag, ResizeHandle } from "@/components/News/ResizeHandle"
 import type { LayoutType, SentimentKey, SentimentSlots } from "@/services/news/news_layout"
 
@@ -16,13 +17,18 @@ export function SentimentLayout(props: {
   setPrimarySplit: (value: number) => void
   secondarySplit: number
   setSecondarySplit: (value: number) => void
+  onSwap: (fromKey: string, toKey: string) => void
   renderPanel: (key: SentimentKey, columns: number) => ReactNode
 }) {
-  const { layoutType, slots, primarySplit, setPrimarySplit, secondarySplit, setSecondarySplit, renderPanel } = props
+  const { layoutType, slots, primarySplit, setPrimarySplit, secondarySplit, setSecondarySplit, onSwap, renderPanel } = props
   const containerRef = useRef<HTMLDivElement>(null)
   const smallsRef = useRef<HTMLDivElement>(null)
 
-  const panelFor = (key: SentimentKey, columns = 1) => renderPanel(key, columns)
+  const panelFor = (key: SentimentKey, columns = 1) => (
+    <DraggablePanel panelKey={key} onSwap={onSwap}>
+      {renderPanel(key, columns)}
+    </DraggablePanel>
+  )
 
   if (layoutType === "columns") {
     const middleWidth = Math.max(0, secondarySplit - primarySplit)

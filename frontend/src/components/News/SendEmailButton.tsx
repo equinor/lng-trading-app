@@ -18,7 +18,11 @@ import { sendEmailSummary } from "@/services/news/news_api"
 
 const DEFAULT_RECIPIENTS = ["csee@equinor.com"]
 
-export function SendEmailButton({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
+export function SendEmailButton({
+  dateFrom,
+  dateTo,
+  categories = [],
+}: { dateFrom: string; dateTo: string; categories?: string[] }) {
   const [open, setOpen] = useState(false)
   const [recipients, setRecipients] = useState<string[]>(DEFAULT_RECIPIENTS)
   const [newEmail, setNewEmail] = useState("")
@@ -41,7 +45,7 @@ export function SendEmailButton({ dateFrom, dateTo }: { dateFrom: string; dateTo
     setSending(true)
     try {
       for (const recipient of recipients) {
-        await sendEmailSummary(recipient, dateFrom || undefined, dateTo || undefined)
+        await sendEmailSummary(recipient, dateFrom || undefined, dateTo || undefined, categories)
       }
       setOpen(false)
     } catch {
