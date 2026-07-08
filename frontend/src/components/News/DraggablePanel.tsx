@@ -1,4 +1,4 @@
-// frontend/src/components/News/DraggablePanel.tsx
+ // frontend/src/components/News/DraggablePanel.tsx
 import { type ReactNode, useState } from "react"
 import { GripVertical } from "lucide-react"
 
