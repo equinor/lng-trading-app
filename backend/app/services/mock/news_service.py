@@ -7,6 +7,11 @@ from uuid import uuid4
 
 from app.core.config import settings
 from app.services.mock.news_constants import NEWS_CATEGORIES, NEWS_REGIONS
+from app.services.news_query import (
+    NewsFilters,
+    facets as _facets,
+    filter_sort_paginate,
+)
 from app.services.normalization import normalize_multi as _normalize_multi
 
 
@@ -71,6 +76,14 @@ def list_news(limit: int = 100, favourited: bool | None = None, offset: int = 0)
 
 def count_news(favourited: bool | None = None) -> int:
     return len(_sorted_rows(favourited))
+
+
+def query_news(filters: NewsFilters, limit: int, offset: int) -> tuple[list[dict], int]:
+    return filter_sort_paginate(_sorted_rows(None), filters, limit, offset)
+
+
+def facets() -> dict[str, list[str]]:
+    return _facets(_sorted_rows(None))
 
 
 def _sorted_rows(favourited: bool | None = None) -> list[dict]:

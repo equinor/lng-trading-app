@@ -2,7 +2,7 @@
 // biome-ignore assist/source/organizeImports: keep grouped for readability
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link as RouterLink } from "@tanstack/react-router"
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Bookmark, Check, ExternalLink, Filter, Plus, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -15,13 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PipelineButton } from "@/components/News/PipelineButton"
 import { formatHtmlText } from "@/lib/utils"
 import {
-  getNews,
+  getFacets,
+  getNewsFeed,
   isImportantStory,
   patchFavourite,
   patchClassification,
   patchRead,
   patchSentiment,
-  type DbNewsRow,
   type DbSentiment,
 } from "@/services/news/news_api"
 import { formatTime, readTimeMinFromContent, cleanTagValue } from "@/services/news/news_utils"
@@ -55,44 +55,9 @@ const REGIONS = [
 // ------------------------------------------------------
 // Helpers
 // ------------------------------------------------------
-function startOfDay(d: Date) {
-  const x = new Date(d)
-  x.setHours(0, 0, 0, 0)
-  return x
-}
-
-function endOfDay(d: Date) {
-  const x = new Date(d)
-  x.setHours(23, 59, 59, 999)
-  return x
-}
-
-function parseISO(iso: string | null) {
-  if (!iso) return null
-  const d = new Date(iso)
-  return Number.isNaN(+d) ? null : d
-}
-
 function formatSentimentLabel(sentiment: DbSentiment) {
   if (!sentiment) return null
   return sentiment.charAt(0).toUpperCase() + sentiment.slice(1)
-}
-
-function getNewsQueryOptions() {
-  return {
-    queryKey: ["newsletter", "news"],
-    queryFn: () => getNews(200, false),
-  }
-}
-
-function mergePatchedArticle(
-  current: DbNewsRow[] | undefined,
-  patch: Partial<DbNewsRow> & Pick<DbNewsRow, "id">,
-) {
-  if (!current) return current
-  return current.map((article) =>
-    article.id === patch.id ? { ...article, ...patch } : article,
-  )
 }
 
 // ------------------------------------------------------
@@ -141,7 +106,6 @@ function NewsletterRoute() {
 // Main
 // ------------------------------------------------------
 function Newsletter() {
-  const { data } = useSuspenseQuery(getNewsQueryOptions())
   const qc = useQueryClient()
   const [expandedArticleId, setExpandedArticleId] = useState<number | null>(null)
 
@@ -157,166 +121,89 @@ function Newsletter() {
   const [regionFilter, setRegionFilter] = useState<string[]>([]) // [] = all
   const { dateFrom, setDateFrom, dateTo, setDateTo, resetDates } = useDateFilter("newsletter", 3)
 
-  // Derived data
-  const categoryUniverse = useMemo(() => {
-    const set = new Set<string>()
-    for (const n of data ?? []) {
-      for (const category of n.category ?? []) {
-        const value = cleanTagValue(category)
-        if (value) set.add(value)
-      }
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b))
-  }, [data])
+  const PAGE_SIZE = 25
+  const [page, setPage] = useState(1)
 
+  // Server-side filter parameters (sent to GET /news/).
+  const feedParams = useMemo(
+    () => ({
+      q: query.trim() || undefined,
+      favourited: favFilter === "Favourites" ? true : favFilter === "NotFavourites" ? false : null,
+      read: readFilter === "Read" ? true : readFilter === "Unread" ? false : null,
+      sentiment:
+        sentiment === "All" ? null : (sentiment.toLowerCase() as "bullish" | "bearish" | "neutral"),
+      categories: categoryFilter,
+      regions: regionFilter.filter((r) => r !== "__none__"),
+      regionNone: regionFilter.includes("__none__"),
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      sort: (sortMode === "newest" ? "newest" : "default") as "default" | "newest",
+    }),
+    [query, favFilter, readFilter, sentiment, categoryFilter, regionFilter, dateFrom, dateTo, sortMode],
+  )
+
+  // Reset to the first page whenever filters change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset page when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [feedParams])
+
+  const feedQuery = useQuery({
+    queryKey: ["newsletter", "feed", feedParams, page],
+    queryFn: () => getNewsFeed({ ...feedParams, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),
+    placeholderData: keepPreviousData,
+  })
+
+  const facetsQuery = useQuery({ queryKey: ["newsletter", "facets"], queryFn: getFacets })
+  const categoryUniverse = facetsQuery.data?.categories ?? []
   const regionUniverse = useMemo(() => {
     const set = new Set<string>(REGIONS)
-    for (const n of data ?? []) {
-      for (const region of n.region ?? []) {
-        const value = cleanTagValue(region)
-        if (value) set.add(value)
-      }
-    }
+    for (const region of facetsQuery.data?.regions ?? []) set.add(region)
     return Array.from(set).sort((a, b) => a.localeCompare(b))
-  }, [data])
+  }, [facetsQuery.data])
 
-  const normalized = useMemo(() => {
-    return (data ?? []).map((n) => ({
-      ...n,
-      readTimeMin: readTimeMinFromContent(n.body),
-      category_norm: (n.category ?? []).map((x) => cleanTagValue(x)).filter(Boolean),
-      region_norm: (n.region ?? []).map((x) => cleanTagValue(x)).filter(Boolean),
-      important_story: isImportantStory(n.importantStory),
-    }))
-  }, [data])
+  const total = feedQuery.data?.total ?? 0
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  // Mutations
+  const feed = useMemo(
+    () =>
+      (feedQuery.data?.data ?? []).map((n) => ({
+        ...n,
+        readTimeMin: readTimeMinFromContent(n.body),
+        category_norm: (n.category ?? []).map((x) => cleanTagValue(x)).filter(Boolean),
+        region_norm: (n.region ?? []).map((x) => cleanTagValue(x)).filter(Boolean),
+        important_story: isImportantStory(n.importantStory),
+      })),
+    [feedQuery.data],
+  )
+
+  // Mutations — invalidate the feed so server-side filters re-apply.
+  const invalidateFeed = () => {
+    qc.invalidateQueries({ queryKey: ["newsletter", "feed"] })
+    qc.invalidateQueries({ queryKey: ["newsletter", "facets"] })
+  }
+
   const favouriteMutation = useMutation({
     mutationFn: (p: { id: number; favourited: boolean }) => patchFavourite(p.id, p.favourited),
-    onSuccess: async (updatedArticle) => {
-      qc.setQueryData<DbNewsRow[]>(["newsletter", "news"], (current) =>
-        mergePatchedArticle(current, updatedArticle),
-      )
-    },
+    onSuccess: invalidateFeed,
   })
 
   const sentimentMutation = useMutation({
     mutationFn: (p: { id: number; official_sentiment: DbSentiment }) =>
       patchSentiment(p.id, p.official_sentiment),
-    onSuccess: async (updatedArticle) => {
-      qc.setQueryData<DbNewsRow[]>(["newsletter", "news"], (current) =>
-        mergePatchedArticle(current, updatedArticle),
-      )
-    },
+    onSuccess: invalidateFeed,
   })
 
   const classificationMutation = useMutation({
     mutationFn: (p: { id: number; category: string[]; region: string[] }) =>
       patchClassification(p.id, p.category, p.region),
-    onSuccess: async (updatedArticle) => {
-      qc.setQueryData<DbNewsRow[]>(["newsletter", "news"], (current) =>
-        mergePatchedArticle(current, updatedArticle),
-      )
-    },
+    onSuccess: invalidateFeed,
   })
 
   const readMutation = useMutation({
     mutationFn: (p: { id: number; read: boolean }) => patchRead(p.id, p.read),
-    onSuccess: async (updatedArticle) => {
-      qc.setQueryData<DbNewsRow[]>(["newsletter", "news"], (current) =>
-        mergePatchedArticle(current, updatedArticle),
-      )
-    },
+    onSuccess: invalidateFeed,
   })
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    let rows = [...normalized]
-
-    // Favourites tri-state
-    if (favFilter === "Favourites") rows = rows.filter((x) => x.favourited)
-    if (favFilter === "NotFavourites") rows = rows.filter((x) => !x.favourited)
-
-    // Read tri-state
-    if (readFilter === "Read") rows = rows.filter((x) => x.read)
-    if (readFilter === "Unread") rows = rows.filter((x) => !x.read)
-
-    // Category multi-select
-    if (categoryFilter.length > 0) {
-      rows = rows.filter((x) => categoryFilter.some((selected) => x.category_norm.includes(selected)))
-    }
-
-    // Region multi-select: includes "__none__" special
-    if (regionFilter.length > 0) {
-      rows = rows.filter((x) => {
-        const hasNone = regionFilter.includes("__none__")
-        const regionVals = regionFilter.filter((r) => r !== "__none__")
-        const regionOk = regionVals.some((selected) => x.region_norm.includes(selected))
-        const noneOk = x.region_norm.length === 0 && hasNone
-        return regionOk || noneOk
-      })
-    }
-
-    // Sentiment filter
-    if (sentiment !== "All") rows = rows.filter((x) => x.official_sentiment === sentiment.toLowerCase())
-
-    // Date range filter
-    if (dateFrom || dateTo) {
-      const from = dateFrom ? startOfDay(new Date(`${dateFrom}T00:00:00`)) : null
-      const to = dateTo ? endOfDay(new Date(`${dateTo}T00:00:00`)) : null
-
-      rows = rows.filter((x) => {
-        const d = parseISO(x.rtpTimestamp)
-        if (!d) return false
-        if (from && d < from) return false
-        if (to && d > to) return false
-        return true
-      })
-    }
-
-    // Search
-    if (q) {
-      rows = rows.filter((x) => {
-        const hay = [
-          x.headline,
-          x.source ?? "",
-          ...x.region_norm,
-          ...x.category_norm,
-        ]
-          .join(" ")
-          .toLowerCase()
-        return hay.includes(q)
-      })
-    }
-
-    const sortByImportantThenNewest = (a: (typeof rows)[0], b: (typeof rows)[0]) => {
-      if (a.important_story !== b.important_story) return a.important_story ? -1 : 1
-      return +new Date(b.rtpTimestamp ?? 0) - +new Date(a.rtpTimestamp ?? 0)
-    }
-    if (sortMode === "newest") {
-      return [...rows].sort(
-        (a, b) => +new Date(b.rtpTimestamp ?? 0) - +new Date(a.rtpTimestamp ?? 0),
-      )
-    }
-    const unread = rows.filter((r) => !r.read).sort(sortByImportantThenNewest)
-    const read = rows.filter((r) => r.read).sort(sortByImportantThenNewest)
-    return [...unread, ...read]
-  }, [normalized, query, favFilter, readFilter, categoryFilter, regionFilter, sentiment, dateFrom, dateTo, sortMode])
-
-  const PAGE_SIZE = 25
-  const [page, setPage] = useState(1)
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-
-  // Reset to the first page whenever the filtered result set changes.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally resets page when filters change
-  useEffect(() => {
-    setPage(1)
-  }, [filtered])
-
-  const feed = useMemo(
-    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [filtered, page],
-  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -676,10 +563,10 @@ function Newsletter() {
                 </div>
               )}
 
-              {filtered.length > 0 && (
+              {total > 0 && (
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 mt-2">
                   <span className="text-xs text-muted-foreground">
-                    Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+                    Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
                   </span>
                   <div className="flex items-center gap-2">
                     <Button

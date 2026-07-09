@@ -12,17 +12,21 @@ if BACKEND == "databricks":
     # later you will implement this file with real SQL Warehouse calls
     from app.services.news_repo_databricks import (  # type: ignore
         count_news,
+        facets,
         get_article,
         list_news,
+        query_news,
         update_article,
     )
 else:
     # your current in-memory mock
     from app.services.mock.news_service import (
         count_news,
+        facets,
         get_article,
         list_news,
+        query_news,
         update_article,
     )
 
-__all__ = ["list_news", "count_news", "get_article", "update_article"]
+__all__ = ["list_news", "count_news", "query_news", "facets", "get_article", "update_article"]

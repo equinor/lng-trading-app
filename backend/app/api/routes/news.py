@@ -15,12 +15,13 @@ from app.schemas.news import (
     SetSentimentBody,
 )
 from app.services import news_repo
+from app.services.news_query import NewsFilters
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Simple TTL cache for the news list — avoids a Databricks round-trip on every page load.
-_news_cache: list | None = None
+_news_cache: tuple[list, int] | None = None
 _news_cache_ts: float = 0.0
 _NEWS_CACHE_TTL: float = 60.0  # seconds
 _PENDING_OVERRIDE_TTL: float = 180.0  # seconds
@@ -105,33 +106,72 @@ def _invalidate_news_cache() -> None:
 
 
 @router.get("/", response_model=NewsListResponse)
-def list_news(limit: int = 200, offset: int = 0, favourited_only: bool = False):
+def list_news(
+    limit: int = 200,
+    offset: int = 0,
+    favourited_only: bool = False,
+    q: str | None = None,
+    favourited: bool | None = None,
+    read: bool | None = None,
+    sentiment: str | None = None,
+    categories: str | None = None,
+    regions: str | None = None,
+    region_none: bool = False,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    sort: str = "default",
+):
     global _news_cache, _news_cache_ts
     now = time.monotonic()
     limit = max(1, min(limit, 1000))
     offset = max(0, offset)
-    favourited = True if favourited_only else None
-    total = news_repo.count_news(favourited=favourited)
+    fav = favourited if favourited is not None else (True if favourited_only else None)
 
-    # Only cache the default unfavourited first page — other variants go straight to DB
-    use_cache = not favourited_only and limit == 200 and offset == 0
-    if use_cache and _news_cache is not None and (now - _news_cache_ts) < _NEWS_CACHE_TTL:
-        return {
-            "data": _apply_pending_overrides(_news_cache),
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-        }
-    rows = news_repo.list_news(limit=limit, favourited=favourited, offset=offset)
-    if use_cache:
-        _news_cache = rows
+    filters = NewsFilters(
+        q=q or None,
+        favourited=fav,
+        read=read,
+        sentiment=(sentiment.lower() if sentiment else None),
+        categories=[c for c in (categories.split("|") if categories else []) if c.strip()],
+        regions=[r for r in (regions.split("|") if regions else []) if r.strip()],
+        region_none=region_none,
+        date_from=date_from or None,
+        date_to=date_to or None,
+        sort=sort or "default",
+    )
+
+    # Cache only the unfiltered default first page.
+    is_default = (
+        fav is None
+        and not favourited_only
+        and not filters.q
+        and read is None
+        and not filters.sentiment
+        and not filters.categories
+        and not filters.regions
+        and not region_none
+        and not filters.date_from
+        and not filters.date_to
+        and filters.sort in ("default", "")
+        and offset == 0
+        and limit == 200
+    )
+
+    if is_default and _news_cache is not None and (now - _news_cache_ts) < _NEWS_CACHE_TTL:
+        rows, total = _news_cache
+        return {"data": _apply_pending_overrides(rows), "total": total, "limit": limit, "offset": offset}
+
+    rows, total = news_repo.query_news(filters, limit, offset)
+    if is_default:
+        _news_cache = (rows, total)
         _news_cache_ts = now
-    return {
-        "data": _apply_pending_overrides(rows),
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-    }
+    return {"data": _apply_pending_overrides(rows), "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/facets")
+def news_facets():
+    """Distinct category and region values across the dataset, for filter dropdowns."""
+    return news_repo.facets()
 
 
 def _bg_update(article_id: int, kwargs: dict) -> None:

@@ -67,6 +67,57 @@ export async function getNewsPage(limit = 25, offset = 0, favouritedOnly = false
   }
 }
 
+export type NewsFeedParams = {
+  limit?: number
+  offset?: number
+  q?: string
+  favourited?: boolean | null
+  read?: boolean | null
+  sentiment?: "bullish" | "bearish" | "neutral" | null
+  categories?: string[]
+  regions?: string[]
+  regionNone?: boolean
+  dateFrom?: string
+  dateTo?: string
+  sort?: "default" | "newest"
+}
+
+/** Server-side filtered + paginated news feed (used by the Newsletter page). */
+export async function getNewsFeed(params: NewsFeedParams): Promise<NewsPage> {
+  const limit = params.limit ?? 25
+  const offset = params.offset ?? 0
+  const query: Record<string, string> = {
+    limit: String(limit),
+    offset: String(offset),
+    sort: params.sort ?? "default",
+  }
+  if (params.q) query.q = params.q
+  if (params.favourited != null) query.favourited = params.favourited ? "true" : "false"
+  if (params.read != null) query.read = params.read ? "true" : "false"
+  if (params.sentiment) query.sentiment = params.sentiment
+  if (params.categories?.length) query.categories = params.categories.join("|")
+  if (params.regions?.length) query.regions = params.regions.join("|")
+  if (params.regionNone) query.region_none = "true"
+  if (params.dateFrom) query.date_from = params.dateFrom
+  if (params.dateTo) query.date_to = params.dateTo
+
+  const res = await apiRequest<NewsListResponse>(NEWS_BASE, { query })
+  const data = res.data ?? []
+  return {
+    data,
+    total: res.total ?? data.length,
+    limit: res.limit ?? limit,
+    offset: res.offset ?? offset,
+  }
+}
+
+export type NewsFacets = { categories: string[]; regions: string[] }
+
+/** Distinct category/region values for the filter dropdowns. */
+export async function getFacets(): Promise<NewsFacets> {
+  return apiRequest<NewsFacets>(`${NEWS_BASE}facets`)
+}
+
 export async function patchFavourite(articleId: number, favourited: boolean) {
   const res = await apiRequest<NewsPatchResponse>(`${NEWS_BASE}${encodeURIComponent(String(articleId))}/favourite`, {
     method: "PATCH",

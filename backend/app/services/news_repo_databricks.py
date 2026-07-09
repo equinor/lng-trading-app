@@ -6,6 +6,11 @@ from app.services.databricks_client.news_state_client import (
     UNSET as DBX_UNSET,
     NewsStateDatabricksClient,
 )
+from app.services.news_query import (
+    NewsFilters,
+    facets as _facets,
+    filter_sort_paginate,
+)
 from app.services.normalization import normalize_multi as _normalize_multi
 
 _UNSET = DBX_UNSET
@@ -59,6 +64,24 @@ def list_news(
 
 def count_news(favourited: bool | None = None) -> int:
     return NewsStateDatabricksClient.count_rows(favourited=favourited)
+
+
+# Upper bound on rows pulled for in-Python filtering/sorting/pagination.
+_QUERY_CAP = 5000
+
+
+def _all_normalized(favourited: bool | None = None) -> list[dict[str, Any]]:
+    rows = NewsStateDatabricksClient.list_rows(limit=_QUERY_CAP, favourited=favourited, offset=0)
+    return [_normalize_db_row(row) for row in rows]
+
+
+def query_news(filters: NewsFilters, limit: int, offset: int) -> tuple[list[dict[str, Any]], int]:
+    rows = _all_normalized(favourited=filters.favourited)
+    return filter_sort_paginate(rows, filters, limit, offset)
+
+
+def facets() -> dict[str, list[str]]:
+    return _facets(_all_normalized())
 
 
 def get_article(article_id: int) -> dict[str, Any]:
