@@ -3,31 +3,42 @@ import { useCallback, useState } from "react"
 
 import { readJson, writeJson } from "@/lib/storage"
 
-const HIDDEN_KEY = "news-hidden-articles-v1"
+const HIDDEN_KEY = "news-hidden-articles-v2"
+
+function composite(panelKey: string, id: number): string {
+  return `${panelKey}::${id}`
+}
 
 /**
- * Client-side "hide" flag for news articles, persisted in localStorage.
+ * Client-side "hide" flag for news articles, scoped per panel/section and
+ * persisted in localStorage.
  *
- * Hidden articles stay favourited and are still shown (greyed out) on the full
- * News Summary page, but are omitted entirely from the condensed page.
+ * Hiding an article in one section (a sentiment panel or a specific category
+ * panel) does not affect the same article in other sections. Hidden articles
+ * stay favourited and are still shown (greyed out) on the full News Summary
+ * page, but are omitted from that section on the condensed page.
  */
 export function useHiddenArticles() {
-  const [hidden, setHidden] = useState<Set<number>>(() => {
-    const stored = readJson<number[]>(localStorage, HIDDEN_KEY) ?? []
+  const [hidden, setHidden] = useState<Set<string>>(() => {
+    const stored = readJson<string[]>(localStorage, HIDDEN_KEY) ?? []
     return new Set(stored)
   })
 
-  const toggleHidden = useCallback((id: number) => {
+  const toggleHidden = useCallback((panelKey: string, id: number) => {
     setHidden((prev) => {
+      const key = composite(panelKey, id)
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       writeJson(localStorage, HIDDEN_KEY, [...next])
       return next
     })
   }, [])
 
-  const isHidden = useCallback((id: number) => hidden.has(id), [hidden])
+  const isHidden = useCallback(
+    (panelKey: string, id: number) => hidden.has(composite(panelKey, id)),
+    [hidden],
+  )
 
   return { hidden, isHidden, toggleHidden }
 }

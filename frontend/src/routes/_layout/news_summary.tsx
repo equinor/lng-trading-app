@@ -32,6 +32,7 @@ import {
   groupNews,
   panelBorderClass,
   panelEmptyText,
+  panelKeyOf,
   panelTextClass,
   SENTIMENT_TITLES,
   type PanelDescriptor,
@@ -115,6 +116,9 @@ function NewsSummary() {
   }, [data, dateFrom, dateTo, layout.categories])
 
   const renderPanel = (panel: PanelDescriptor, columns: number) => {
+    const panelKey = panelKeyOf(panel)
+    const isHidden = (id: number) => hidden.isHidden(panelKey, id)
+    const onToggleHidden = (id: number) => hidden.toggleHidden(panelKey, id)
     if (panel.kind === "sentiment") {
       return (
         <SummaryPanel
@@ -124,8 +128,8 @@ function NewsSummary() {
           columns={columns}
           borderClass={panelBorderClass(panel.key)}
           textClass={panelTextClass(panel.key)}
-          isHidden={hidden.isHidden}
-          onToggleHidden={hidden.toggleHidden}
+          isHidden={isHidden}
+          onToggleHidden={onToggleHidden}
           onPatched={handlePatched}
         />
       )
@@ -140,8 +144,8 @@ function NewsSummary() {
         columns={columns}
         borderClass={categoryBorderClass(index)}
         textClass={categoryTextClass(index)}
-        isHidden={hidden.isHidden}
-        onToggleHidden={hidden.toggleHidden}
+        isHidden={isHidden}
+        onToggleHidden={onToggleHidden}
         onPatched={handlePatched}
       />
     )

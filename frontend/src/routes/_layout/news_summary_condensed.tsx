@@ -29,6 +29,7 @@ import {
   groupNews,
   panelBorderClass,
   panelEmptyText,
+  panelKeyOf,
   panelTextClass,
   SENTIMENT_TITLES,
   type PanelDescriptor,
@@ -81,16 +82,12 @@ function NewsSummaryCondensed() {
   const newsQuery = useQuery(getFavouritedNewsQueryOptions())
   const data = newsQuery.data
 
-  // Hidden articles are omitted entirely from the condensed view.
+  // Hidden articles are omitted from the section they were hidden in (per-panel).
   const hidden = useHiddenArticles()
-  const visibleData = useMemo(
-    () => (data ?? []).filter((n) => !hidden.isHidden(n.id)),
-    [data, hidden.isHidden],
-  )
 
-  const grouped = useMemo(() => groupNews(visibleData, dateFrom, dateTo), [visibleData, dateFrom, dateTo])
+  const grouped = useMemo(() => groupNews(data, dateFrom, dateTo), [data, dateFrom, dateTo])
   const dominant = dominantSentiment(grouped)
-  const categoryOptions = useMemo(() => availableCategories(visibleData), [visibleData])
+  const categoryOptions = useMemo(() => availableCategories(data), [data])
 
   const layout = useNewsLayout(LAYOUT_STORAGE_KEY, dominant)
   const {
@@ -106,17 +103,19 @@ function NewsSummaryCondensed() {
   const categoryRows = useMemo(() => {
     const map: Record<string, RowWithReadTime[]> = {}
     for (const value of layout.categories) {
-      map[value] = groupByCategory(visibleData, dateFrom, dateTo, value)
+      map[value] = groupByCategory(data, dateFrom, dateTo, value)
     }
     return map
-  }, [visibleData, dateFrom, dateTo, layout.categories])
+  }, [data, dateFrom, dateTo, layout.categories])
 
   const renderPanel = (panel: PanelDescriptor, columns: number) => {
+    const panelKey = panelKeyOf(panel)
+    const visible = (rows: RowWithReadTime[]) => rows.filter((n) => !hidden.isHidden(panelKey, n.id))
     if (panel.kind === "sentiment") {
       return (
         <SummaryPanel
           title={SENTIMENT_TITLES[panel.key]}
-          rows={grouped[panel.key]}
+          rows={visible(grouped[panel.key])}
           emptyText={panelEmptyText(panel.key)}
           columns={columns}
           borderClass={panelBorderClass(panel.key)}
@@ -129,7 +128,7 @@ function NewsSummaryCondensed() {
     return (
       <SummaryPanel
         title={title}
-        rows={categoryRows[panel.value] ?? []}
+        rows={visible(categoryRows[panel.value] ?? [])}
         emptyText={`No favourited articles tagged ${title}.`}
         columns={columns}
         borderClass={categoryBorderClass(index)}
