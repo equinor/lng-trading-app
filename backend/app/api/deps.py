@@ -14,13 +14,19 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 DEV_FALLBACK_EMAIL = "analyst@example.com"
+# App-role values that grant write access (matched case-insensitively; a role
+# whose value merely contains "writ"/"admin" also counts, to tolerate values
+# like "app.writer" or "Analytics.Writer").
 WRITER_ROLE = "Writer"
 READER_ROLE = "Reader"
 
@@ -53,6 +59,15 @@ def _decode_roles(request: Request) -> list[str]:
     if isinstance(roles, list):
         return [str(r) for r in roles]
     return []
+
+
+def _is_writer(roles: list[str], email: str) -> bool:
+    for role in roles:
+        value = role.strip().lower()
+        if value == WRITER_ROLE.lower() or "writ" in value or "admin" in value:
+            return True
+    # Break-glass: the configured superuser can always write.
+    return email == settings.FIRST_SUPERUSER.strip().lower()
 
 
 def get_current_user(request: Request) -> dict:
@@ -89,17 +104,12 @@ def get_current_user(request: Request) -> dict:
         )
 
     roles = _decode_roles(request)
-    can_write = WRITER_ROLE in roles
-    # If the roles claim couldn't be read (token not forwarded), degrade to
-    # read-only instead of locking everyone out. Writes always require an
-    # explicit Writer role.
-    can_read = (READER_ROLE in roles) or can_write or (not roles)
-
-    if not can_read:
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have access to this application.",
-        )
+    # Read access: any authenticated user in the domain. Sign-in itself is
+    # already restricted to the assigned groups by "Assignment required" in the
+    # Enterprise Application, so reaching here means the user is authorized to read.
+    can_read = True
+    can_write = _is_writer(roles, email)
+    logger.info("auth email=%s roles=%s can_write=%s", email, roles, can_write)
 
     return {
         "email": email,
