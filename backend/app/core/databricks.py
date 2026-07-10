@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -112,6 +113,11 @@ def _open_connection() -> sql.client.Connection:
 # On any error the cursor path will clear it so the next call reconnects.
 _conn: sql.client.Connection | None = None
 
+# The databricks-sql connection/cursor is NOT thread-safe. FastAPI runs sync
+# endpoints in a threadpool, so without this lock concurrent GET/PATCH requests
+# would run cursors on the same connection at once and corrupt (and crash) it.
+_db_lock = threading.Lock()
+
 
 def _get_conn() -> sql.client.Connection:
     global _conn
@@ -132,42 +138,44 @@ def _reset_conn() -> None:
 
 def fetch_all(query: str, params: Sequence[Any] | None = None) -> list[dict]:
     params = params or []
-    try:
-        t0 = time.monotonic()
-        conn = _get_conn()
-        t1 = time.monotonic()
-        with conn.cursor() as cur:
-            t2 = time.monotonic()
-            cur.execute(query, params)
-            t3 = time.monotonic()
-            cols = [c[0] for c in cur.description] if cur.description else []
-            rows = cur.fetchall()
-        t4 = time.monotonic()
-        print(
-            f"[DBX] fetch_all — conn={t1-t0:.3f}s cursor={t2-t1:.3f}s execute={t3-t2:.3f}s fetch={t4-t3:.3f}s total={t4-t0:.3f}s",
-            flush=True,
-        )
-        return [dict(zip(cols, r, strict=False)) for r in rows]
-    except Exception:
-        _reset_conn()
-        raise
+    with _db_lock:
+        try:
+            t0 = time.monotonic()
+            conn = _get_conn()
+            t1 = time.monotonic()
+            with conn.cursor() as cur:
+                t2 = time.monotonic()
+                cur.execute(query, params)
+                t3 = time.monotonic()
+                cols = [c[0] for c in cur.description] if cur.description else []
+                rows = cur.fetchall()
+            t4 = time.monotonic()
+            print(
+                f"[DBX] fetch_all — conn={t1-t0:.3f}s cursor={t2-t1:.3f}s execute={t3-t2:.3f}s fetch={t4-t3:.3f}s total={t4-t0:.3f}s",
+                flush=True,
+            )
+            return [dict(zip(cols, r, strict=False)) for r in rows]
+        except Exception:
+            _reset_conn()
+            raise
 
 
 def exec_one(query: str, params: Sequence[Any] | None = None) -> int:
     params = params or []
-    try:
-        t0 = time.monotonic()
-        conn = _get_conn()
-        t1 = time.monotonic()
-        with conn.cursor() as cur:
-            t2 = time.monotonic()
-            cur.execute(query, params)
-            t3 = time.monotonic()
-        print(
-            f"[DBX] exec_one — conn={t1-t0:.3f}s cursor={t2-t1:.3f}s execute={t3-t2:.3f}s total={t3-t0:.3f}s",
-            flush=True,
-        )
-        return int(cur.rowcount or 0)
-    except Exception:
-        _reset_conn()
-        raise
+    with _db_lock:
+        try:
+            t0 = time.monotonic()
+            conn = _get_conn()
+            t1 = time.monotonic()
+            with conn.cursor() as cur:
+                t2 = time.monotonic()
+                cur.execute(query, params)
+                t3 = time.monotonic()
+            print(
+                f"[DBX] exec_one — conn={t1-t0:.3f}s cursor={t2-t1:.3f}s execute={t3-t2:.3f}s total={t3-t0:.3f}s",
+                flush=True,
+            )
+            return int(cur.rowcount or 0)
+        except Exception:
+            _reset_conn()
+            raise

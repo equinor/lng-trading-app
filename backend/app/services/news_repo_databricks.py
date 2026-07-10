@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 from typing import Any
 
@@ -76,12 +77,14 @@ _QUERY_CAP = 5000
 _DATASET_TTL = 30.0  # seconds
 _dataset_cache: list[dict[str, Any]] | None = None
 _dataset_ts: float = 0.0
+_dataset_lock = threading.Lock()
 
 
 def _invalidate_dataset() -> None:
     global _dataset_cache, _dataset_ts
-    _dataset_cache = None
-    _dataset_ts = 0.0
+    with _dataset_lock:
+        _dataset_cache = None
+        _dataset_ts = 0.0
 
 
 def _patch_dataset_row(article_id: int, changes: dict[str, Any]) -> None:
@@ -89,23 +92,27 @@ def _patch_dataset_row(article_id: int, changes: dict[str, Any]) -> None:
 
     Only touches this worker's cache; other workers self-correct within the TTL.
     """
-    if _dataset_cache is None or not changes:
+    if not changes:
         return
-    for row in _dataset_cache:
-        if row.get("id") == article_id:
-            row.update(changes)
-            break
+    with _dataset_lock:
+        if _dataset_cache is None:
+            return
+        for row in _dataset_cache:
+            if row.get("id") == article_id:
+                row.update(changes)
+                break
 
 
 def _get_dataset() -> list[dict[str, Any]]:
     global _dataset_cache, _dataset_ts
-    now = time.monotonic()
-    if _dataset_cache is not None and (now - _dataset_ts) < _DATASET_TTL:
+    with _dataset_lock:
+        now = time.monotonic()
+        if _dataset_cache is not None and (now - _dataset_ts) < _DATASET_TTL:
+            return _dataset_cache
+        rows = NewsStateDatabricksClient.list_rows(limit=_QUERY_CAP, favourited=None, offset=0)
+        _dataset_cache = [_normalize_db_row(row) for row in rows]
+        _dataset_ts = now
         return _dataset_cache
-    rows = NewsStateDatabricksClient.list_rows(limit=_QUERY_CAP, favourited=None, offset=0)
-    _dataset_cache = [_normalize_db_row(row) for row in rows]
-    _dataset_ts = now
-    return _dataset_cache
 
 
 def query_news(filters: NewsFilters, limit: int, offset: int) -> tuple[list[dict[str, Any]], int]:
