@@ -84,6 +84,19 @@ def _invalidate_dataset() -> None:
     _dataset_ts = 0.0
 
 
+def _patch_dataset_row(article_id: int, changes: dict[str, Any]) -> None:
+    """Apply a write to the cached dataset in place, avoiding a full refetch.
+
+    Only touches this worker's cache; other workers self-correct within the TTL.
+    """
+    if _dataset_cache is None or not changes:
+        return
+    for row in _dataset_cache:
+        if row.get("id") == article_id:
+            row.update(changes)
+            break
+
+
 def _get_dataset() -> list[dict[str, Any]]:
     global _dataset_cache, _dataset_ts
     now = time.monotonic()
@@ -162,8 +175,6 @@ def update_article(
     if changed == 0:
         raise KeyError(article_id)
 
-    _invalidate_dataset()
-
     updated: dict[str, Any] = {"id": article_id}
 
     if normalized_favourited is not _UNSET:
@@ -180,5 +191,9 @@ def update_article(
 
     if normalized_region is not _UNSET:
         updated["region"] = _normalize_multi(normalized_region)
+
+    # Keep the in-memory dataset warm by applying the change locally instead of
+    # discarding it (which would force the next request to refetch everything).
+    _patch_dataset_row(article_id, {k: v for k, v in updated.items() if k != "id"})
 
     return updated
