@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from app.services.databricks_client.news_state_client import (
@@ -69,19 +70,37 @@ def count_news(favourited: bool | None = None) -> int:
 # Upper bound on rows pulled for in-Python filtering/sorting/pagination.
 _QUERY_CAP = 5000
 
+# TTL cache of the full normalized dataset. Filtering/sorting/pagination all run
+# in memory against this snapshot, so only one Databricks round-trip is made per
+# TTL window (or until a write invalidates it) instead of one per request.
+_DATASET_TTL = 30.0  # seconds
+_dataset_cache: list[dict[str, Any]] | None = None
+_dataset_ts: float = 0.0
 
-def _all_normalized(favourited: bool | None = None) -> list[dict[str, Any]]:
-    rows = NewsStateDatabricksClient.list_rows(limit=_QUERY_CAP, favourited=favourited, offset=0)
-    return [_normalize_db_row(row) for row in rows]
+
+def _invalidate_dataset() -> None:
+    global _dataset_cache, _dataset_ts
+    _dataset_cache = None
+    _dataset_ts = 0.0
+
+
+def _get_dataset() -> list[dict[str, Any]]:
+    global _dataset_cache, _dataset_ts
+    now = time.monotonic()
+    if _dataset_cache is not None and (now - _dataset_ts) < _DATASET_TTL:
+        return _dataset_cache
+    rows = NewsStateDatabricksClient.list_rows(limit=_QUERY_CAP, favourited=None, offset=0)
+    _dataset_cache = [_normalize_db_row(row) for row in rows]
+    _dataset_ts = now
+    return _dataset_cache
 
 
 def query_news(filters: NewsFilters, limit: int, offset: int) -> tuple[list[dict[str, Any]], int]:
-    rows = _all_normalized(favourited=filters.favourited)
-    return filter_sort_paginate(rows, filters, limit, offset)
+    return filter_sort_paginate(_get_dataset(), filters, limit, offset)
 
 
 def facets() -> dict[str, list[str]]:
-    return _facets(_all_normalized())
+    return _facets(_get_dataset())
 
 
 def get_article(article_id: int) -> dict[str, Any]:
@@ -142,6 +161,8 @@ def update_article(
 
     if changed == 0:
         raise KeyError(article_id)
+
+    _invalidate_dataset()
 
     updated: dict[str, Any] = {"id": article_id}
 

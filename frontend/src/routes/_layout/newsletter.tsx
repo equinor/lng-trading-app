@@ -111,8 +111,15 @@ function Newsletter() {
 
   // UI state
   const [query, setQuery] = useState("")
+  const [debouncedQuery, setDebouncedQuery] = useState("")
   const [sentiment, setSentiment] = useState<"All" | "Bullish" | "Bearish" | "Neutral">("All")
   const [sortMode, setSortMode] = useState<"default" | "newest">("default")
+
+  // Debounce the search box so typing doesn't fire a request per keystroke.
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQuery(query), 300)
+    return () => clearTimeout(handle)
+  }, [query])
 
   // Filters
   const [favFilter, setFavFilter] = useState<FavFilter>("All")
@@ -127,7 +134,7 @@ function Newsletter() {
   // Server-side filter parameters (sent to GET /news/).
   const feedParams = useMemo(
     () => ({
-      q: query.trim() || undefined,
+      q: debouncedQuery.trim() || undefined,
       favourited: favFilter === "Favourites" ? true : favFilter === "NotFavourites" ? false : null,
       read: readFilter === "Read" ? true : readFilter === "Unread" ? false : null,
       sentiment:
@@ -139,7 +146,7 @@ function Newsletter() {
       dateTo: dateTo || undefined,
       sort: (sortMode === "newest" ? "newest" : "default") as "default" | "newest",
     }),
-    [query, favFilter, readFilter, sentiment, categoryFilter, regionFilter, dateFrom, dateTo, sortMode],
+    [debouncedQuery, favFilter, readFilter, sentiment, categoryFilter, regionFilter, dateFrom, dateTo, sortMode],
   )
 
   // Reset to the first page whenever filters change.
