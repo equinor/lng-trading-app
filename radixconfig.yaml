@@ -74,7 +74,8 @@ spec:
               clientId: 60283d4b-f774-407b-983b-a22dcfeb6d03
               scope: "openid profile email"
               setXAuthRequestHeaders: true
-              setAuthorizationHeader: false
+              # Forward the JWT so the backend can read the app-role claim.
+              setAuthorizationHeader: true
               sessionStoreType: systemManaged
         - environment: prod
           variables:
@@ -87,5 +88,6 @@ spec:
               # Forward the authenticated identity to the app as
               # X-Auth-Request-Email / X-Auth-Request-User headers.
               setXAuthRequestHeaders: true
-              setAuthorizationHeader: false
+              # Forward the JWT so the backend can read the app-role claim.
+              setAuthorizationHeader: true
               sessionStoreType: systemManaged

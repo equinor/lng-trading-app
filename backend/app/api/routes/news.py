@@ -4,9 +4,10 @@ import logging
 import time
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
+from app.api.deps import require_reader, require_writer
 from app.schemas.news import (
     NewsListResponse,
     SetClassificationBody,
@@ -17,7 +18,7 @@ from app.schemas.news import (
 from app.services import news_repo
 from app.services.news_query import NewsFilters
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_reader)])
 logger = logging.getLogger(__name__)
 
 # Simple TTL cache for the news list — avoids a Databricks round-trip on every page load.
@@ -184,7 +185,7 @@ def _bg_update(article_id: int, kwargs: dict) -> None:
         logger.error("Background Databricks update failed for article %s: %s", article_id, exc)
 
 
-@router.patch("/{article_id}/favourite")
+@router.patch("/{article_id}/favourite", dependencies=[Depends(require_writer)])
 def set_favourite(article_id: int, body: SetFavouriteBody, bg: BackgroundTasks):
     optimistic: dict = {"id": article_id, "favourited": body.favourited}
     _set_pending_override(article_id, {"favourited": body.favourited})
@@ -192,7 +193,7 @@ def set_favourite(article_id: int, body: SetFavouriteBody, bg: BackgroundTasks):
     return {"ok": True, "data": optimistic}
 
 
-@router.patch("/{article_id}/read")
+@router.patch("/{article_id}/read", dependencies=[Depends(require_writer)])
 def set_read(article_id: int, body: SetReadBody, bg: BackgroundTasks):
     optimistic: dict = {"id": article_id, "read": body.read}
     _set_pending_override(article_id, {"read": body.read})
@@ -200,7 +201,7 @@ def set_read(article_id: int, body: SetReadBody, bg: BackgroundTasks):
     return {"ok": True, "data": optimistic}
 
 
-@router.patch("/{article_id}/sentiment")
+@router.patch("/{article_id}/sentiment", dependencies=[Depends(require_writer)])
 def set_sentiment(article_id: int, body: SetSentimentBody, bg: BackgroundTasks):
     optimistic: dict = {"id": article_id, "official_sentiment": body.official_sentiment}
     _set_pending_override(article_id, {"official_sentiment": body.official_sentiment})
@@ -208,7 +209,7 @@ def set_sentiment(article_id: int, body: SetSentimentBody, bg: BackgroundTasks):
     return {"ok": True, "data": optimistic}
 
 
-@router.patch("/{article_id}/classification")
+@router.patch("/{article_id}/classification", dependencies=[Depends(require_writer)])
 def set_classification(article_id: int, body: SetClassificationBody, bg: BackgroundTasks):
     optimistic: dict = {"id": article_id, "category": body.category, "region": body.region}
     _set_pending_override(article_id, {"category": body.category, "region": body.region})
@@ -331,7 +332,7 @@ def _format_ts(ts: str | datetime | None) -> str:
     return dt.strftime("%d %b, %I:%M %p")
 
 
-@router.post("/email-summary")
+@router.post("/email-summary", dependencies=[Depends(require_writer)])
 def send_news_summary_email(body: EmailSummaryBody, bg: BackgroundTasks):
     from app.core.config import settings
     if not settings.emails_enabled:
@@ -383,7 +384,7 @@ def get_pipeline_last_run():
         raise HTTPException(status_code=502, detail="Could not read pipeline status") from exc
 
 
-@router.post("/pipeline/trigger")
+@router.post("/pipeline/trigger", dependencies=[Depends(require_writer)])
 def trigger_pipeline():
     from app.services import databricks_jobs
 
