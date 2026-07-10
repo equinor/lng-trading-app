@@ -69,7 +69,7 @@ def count_news(favourited: bool | None = None) -> int:
 
 
 # Upper bound on rows pulled for in-Python filtering/sorting/pagination.
-_QUERY_CAP = 5000
+_QUERY_CAP = 2000
 
 # TTL cache of the full normalized dataset. Filtering/sorting/pagination all run
 # in memory against this snapshot, so only one Databricks round-trip is made per

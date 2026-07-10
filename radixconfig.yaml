@@ -37,6 +37,12 @@ spec:
         DATABRICKS_WORKSPACE_URL: adb-1023210238843247.7.azuredatabricks.net
         DATABRICKS_JOB_ID: "93951735174333"
         FIRST_SUPERUSER: csee@equinor.com
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "512Mi"
+        limits:
+          memory: "1024Mi"
       healthChecks:
         livenessProbe:
           httpGet:
