@@ -34,4 +34,4 @@ RUN adduser --disabled-password --gecos "" --uid 1001 appuser \
     && chown -R appuser:appuser /app
 USER 1001
 
-CMD ["fastapi", "run", "--workers", "2", "app/main.py"]
+CMD ["fastapi", "run", "--workers", "1", "app/main.py"]
