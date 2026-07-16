@@ -440,7 +440,7 @@ function Newsletter() {
                           </button>
 
                           {(n.paragraph_summary || n.summary) && (
-                            <p className="text-sm leading-6 text-muted-foreground line-clamp-3 whitespace-pre-wrap">
+                            <p className="text-sm leading-6 text-muted-foreground whitespace-pre-wrap">
                               {formatHtmlText(n.paragraph_summary || n.summary || "")}
                             </p>
                           )}
