@@ -32,7 +32,7 @@ spec:
         - ATLAS_CLIENT_SECRET
       variables:
         NEWS_BACKEND: databricks
-        NEWS_TABLE: ms_vulcan_gplng_plab.lng_apac.platts_lng_top_news
+        NEWS_TABLE: ms_vulcan_gplng_plab.trader_news_app.platts_lng_top_news
         DATABRICKS_USE_SERVICE_PRINCIPAL: "true"
         DATABRICKS_WORKSPACE_URL: adb-1023210238843247.7.azuredatabricks.net
         DATABRICKS_JOB_ID: "93951735174333"

@@ -164,7 +164,7 @@ lng-trading-app/
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NEWS_BACKEND` | `mock` | `databricks` for real data, `mock` for fake seed |
-| `NEWS_TABLE` | `lng_apac.news_state` | Unity Catalog table name |
+| `NEWS_TABLE` | `ms_vulcan_gplng_plab.trader_news_app.platts_lng_top_news` | Unity Catalog table name |
 | `MOCK_NEWS_SEED_COUNT` | `12` | Number of mock articles to seed |
 | `SECRET_KEY` | random | JWT signing key |
 | `BACKEND_CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
