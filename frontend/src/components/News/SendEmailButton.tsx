@@ -14,6 +14,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { LoadingButton } from "@/components/ui/loading-button"
+import { RequestStatus } from "@/components/News/RequestStatus"
+import useCustomToast from "@/hooks/useCustomToast"
 import { sendEmailSummary } from "@/services/news/news_api"
 
 const DEFAULT_RECIPIENTS = ["csee@equinor.com"]
@@ -27,6 +30,7 @@ export function SendEmailButton({
   const [recipients, setRecipients] = useState<string[]>(DEFAULT_RECIPIENTS)
   const [newEmail, setNewEmail] = useState("")
   const [sending, setSending] = useState(false)
+  const { showErrorToast } = useCustomToast()
 
   const addRecipient = () => {
     const trimmed = newEmail.trim().toLowerCase()
@@ -49,14 +53,14 @@ export function SendEmailButton({
       }
       setOpen(false)
     } catch {
-      // Could show error toast
+      showErrorToast("Failed to send the news summary. Please try again.")
     } finally {
       setSending(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => { if (!sending) setOpen(next) }}>
       <DialogTrigger asChild>
         <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5">
           <Mail className="h-3.5 w-3.5" />
@@ -79,6 +83,7 @@ export function SendEmailButton({
                 <button
                   type="button"
                   className="ml-1 rounded-full hover:bg-muted-foreground/20 px-1 text-xs"
+                  disabled={sending}
                   onClick={() => removeRecipient(email)}
                 >
                   ×
@@ -92,21 +97,23 @@ export function SendEmailButton({
               type="email"
               placeholder="Add recipient..."
               value={newEmail}
+              disabled={sending}
               onChange={(e) => setNewEmail(e.target.value)}
               className="h-9"
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addRecipient() } }}
             />
-            <Button type="button" variant="secondary" size="sm" className="h-9" onClick={addRecipient} disabled={!newEmail.trim()}>
+            <Button type="button" variant="secondary" size="sm" className="h-9" onClick={addRecipient} disabled={sending || !newEmail.trim()}>
               Add
             </Button>
           </div>
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button type="button" onClick={handleSend} disabled={sending || recipients.length === 0}>
+          {sending && <RequestStatus>Sending summary...</RequestStatus>}
+          <Button type="button" variant="ghost" disabled={sending} onClick={() => setOpen(false)}>Cancel</Button>
+          <LoadingButton type="button" onClick={handleSend} loading={sending} disabled={recipients.length === 0}>
             {sending ? "Sending..." : `Send to ${recipients.length} recipient${recipients.length !== 1 ? "s" : ""}`}
-          </Button>
+          </LoadingButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

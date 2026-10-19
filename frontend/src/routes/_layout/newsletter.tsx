@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PipelineButton } from "@/components/News/PipelineButton"
+import { RequestStatus } from "@/components/News/RequestStatus"
 import { formatHtmlText } from "@/lib/utils"
 import {
   getFacets,
@@ -71,6 +72,7 @@ export const Route = createFileRoute("/_layout/newsletter")({
 function PendingNewsletter() {
   return (
     <div className="flex flex-col gap-6">
+      <RequestStatus>Loading articles...</RequestStatus>
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
           <Skeleton className="h-8 w-64" />
@@ -211,6 +213,9 @@ function Newsletter() {
     mutationFn: (p: { id: number; read: boolean }) => patchRead(p.id, p.read),
     onSuccess: invalidateFeed,
   })
+
+  const saving = favouriteMutation.isPending || sentimentMutation.isPending
+    || classificationMutation.isPending || readMutation.isPending
 
   return (
     <div className="flex flex-col gap-6">
@@ -383,11 +388,25 @@ function Newsletter() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-3">
                 <CardTitle className="text-base">Live Feed</CardTitle>
+                {saving ? (
+                  <RequestStatus>Saving changes...</RequestStatus>
+                ) : feedQuery.isFetching || facetsQuery.isFetching ? (
+                  <RequestStatus>Loading articles...</RequestStatus>
+                ) : null}
               </div>
             </CardHeader>
 
             <CardContent className="pt-0">
-              {feed.length === 0 ? (
+              {feedQuery.isPending ? (
+                <div className="space-y-4 py-4">
+                  <Skeleton className="h-40 w-full" />
+                  <Skeleton className="h-40 w-full" />
+                </div>
+              ) : feedQuery.isError ? (
+                <div role="alert" className="py-10 text-center text-sm text-destructive">
+                  Failed to load articles. Please try again.
+                </div>
+              ) : feed.length === 0 ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">
                   No matching stories.
                 </div>
@@ -485,6 +504,7 @@ function Newsletter() {
                             type="button"
                             size="sm"
                             variant={n.favourited ? "default" : "secondary"}
+                            disabled={favouriteMutation.isPending}
                             onClick={() => {
                               if (favouriteMutation.isPending) return
                               favouriteMutation.mutate({
@@ -507,6 +527,7 @@ function Newsletter() {
                                   type="button"
                                   size="sm"
                                   variant={active ? "default" : "secondary"}
+                                  disabled={sentimentMutation.isPending}
                                   onClick={() => {
                                     if (sentimentMutation.isPending) return
                                     sentimentMutation.mutate({

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query"
 import { LayoutSettingsButton } from "@/components/News/LayoutSettingsButton"
 import { GridSectionLayout } from "@/components/News/GridSectionLayout"
 import { PipelineButton } from "@/components/News/PipelineButton"
+import { RequestStatus } from "@/components/News/RequestStatus"
 import { SendEmailButton } from "@/components/News/SendEmailButton"
 import { SentimentLayout } from "@/components/News/SentimentLayout"
 import { Button } from "@/components/ui/button"
@@ -56,6 +57,7 @@ export const Route = createFileRoute("/_layout/news_summary_condensed")({
 function PendingNewsSummaryCondensed() {
   return (
     <div className="flex flex-col gap-4">
+      <RequestStatus>Loading articles...</RequestStatus>
       <div className="space-y-2">
         <Skeleton className="h-8 w-72" />
         <Skeleton className="h-4 w-130" />
@@ -156,6 +158,7 @@ function NewsSummaryCondensed() {
           LNG market news / sentiment (condensed)
         </h1>
         <div className="flex items-center gap-2">
+          {newsQuery.isFetching && <RequestStatus>Loading articles...</RequestStatus>}
           <PipelineButton />
           <div className="w-px h-5 bg-border mx-1" />
           <LayoutSettingsButton

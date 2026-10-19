@@ -5,6 +5,8 @@ import { EyeOff, Star, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { RequestStatus } from "@/components/News/RequestStatus"
+import useCustomToast from "@/hooks/useCustomToast"
 import {
   type DbNewsRow,
   type DbSentiment,
@@ -34,6 +36,7 @@ export function ArticleEditPanel(props: {
 }) {
   const { article, isHidden, onToggleHidden, onPatched } = props
   const [saving, setSaving] = useState(false)
+  const { showErrorToast } = useCustomToast()
   const [regions, setRegions] = useState<string[]>(article.region ?? [])
   const [categories, setCategories] = useState<string[]>(article.category ?? [])
   const [newRegion, setNewRegion] = useState("")
@@ -49,6 +52,8 @@ export function ArticleEditPanel(props: {
     try {
       await fn()
       onPatched()
+    } catch {
+      showErrorToast("Failed to save article changes. Please try again.")
     } finally {
       setSaving(false)
     }
@@ -90,6 +95,7 @@ export function ArticleEditPanel(props: {
 
   return (
     <div className="mt-1 space-y-2 rounded border bg-muted/30 p-2 text-[11px]">
+      {saving && <RequestStatus>Saving changes...</RequestStatus>}
       <div className="flex flex-wrap items-center gap-1">
         <Button
           type="button"

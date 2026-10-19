@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Play, RefreshCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { RequestStatus } from "@/components/News/RequestStatus"
 import useCustomToast from "@/hooks/useCustomToast"
 import { getPipelineLastRun, triggerPipeline } from "@/services/news/news_api"
 
@@ -57,10 +58,13 @@ export function PipelineButton({ withRunButton = false }: { withRunButton?: bool
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground whitespace-nowrap">
+      {isRunning || triggerMutation.isPending ? (
+        <RequestStatus>{triggerMutation.isPending ? "Starting pipeline..." : "Pipeline running..."}</RequestStatus>
+      ) : lastRunQuery.isPending ? (
+        <RequestStatus>Loading update status...</RequestStatus>
+      ) : <span className="text-xs text-muted-foreground whitespace-nowrap">
         Updated as of: <span className="font-medium text-foreground">{lastRunLabel}</span>
-        {isRunning ? " (running…)" : ""}
-      </span>
+      </span>}
       {withRunButton ? (
         <Button
           type="button"

@@ -8,6 +8,7 @@ import { ArticleEditPanel } from "@/components/News/ArticleEditPanel"
 import { LayoutSettingsButton } from "@/components/News/LayoutSettingsButton"
 import { GridSectionLayout } from "@/components/News/GridSectionLayout"
 import { PipelineButton } from "@/components/News/PipelineButton"
+import { RequestStatus } from "@/components/News/RequestStatus"
 import { SendEmailButton } from "@/components/News/SendEmailButton"
 import { SentimentLayout } from "@/components/News/SentimentLayout"
 import { Badge } from "@/components/ui/badge"
@@ -59,6 +60,7 @@ export const Route = createFileRoute("/_layout/news_summary")({
 function PendingNewsSummary() {
   return (
     <div className="flex flex-col gap-4">
+      <RequestStatus>Loading articles...</RequestStatus>
       <div className="space-y-2">
         <Skeleton className="h-8 w-72" />
         <Skeleton className="h-4 w-130" />
@@ -169,6 +171,7 @@ function NewsSummary() {
       <div className="flex flex-wrap items-center justify-between gap-4 shrink-0">
         <h1 className="text-lg font-bold tracking-tight" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>LNG market news / sentiment </h1>
         <div className="flex items-center gap-2">
+          {newsQuery.isFetching && <RequestStatus>Loading articles...</RequestStatus>}
           <PipelineButton />
           <div className="w-px h-5 bg-border mx-1" />
           <LayoutSettingsButton

@@ -21,6 +21,11 @@ Check the file `package.json` to see other available options.
 
 ### News summary layouts
 
+The newsletter and summary pages show a spinning loading indicator while articles
+are fetched or refreshed. Existing content stays visible during background refreshes.
+Article saves, summary emails, and pipeline runs also show progress indicators.
+The newsletter only shows "No matching stories" after loading finishes.
+
 Both summary pages share a **Layout > Default layout** preference:
 
 - **Automatic: dominant sentiment**: gives the sentiment with the
