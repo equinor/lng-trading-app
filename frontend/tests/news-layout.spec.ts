@@ -85,20 +85,37 @@ async function expectAutomatic(page: Page, dominant: SentimentKey) {
 }
 
 async function storedLayout(page: Page): Promise<StoredLayout | null> {
-  return page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "null"), storageKey)
+  return page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), storageKey)
 }
 
 for (const path of paths) {
+  for (const mode of ["columns", "auto"] as const) {
+    test(`${path} remembers ${mode} after the tab is closed and reopened`, async ({ page, context }) => {
+      await mockNews(page, "bearish")
+      await page.goto(path)
+      await expectColumns(page)
+      await selectDefault(page, mode)
+      await expect.poll(async () => (await storedLayout(page))?.defaultMode).toBe(mode)
+      await page.close()
+
+      const reopened = await context.newPage()
+      await mockNews(reopened, "bearish")
+      await reopened.goto(path)
+      if (mode === "columns") await expectColumns(reopened)
+      else await expectAutomatic(reopened, "bearish")
+    })
+  }
+
   for (const dominant of sentiments) {
-    test(`${path} retains the ${dominant}-dominant automatic default and offers fixed columns`, async ({ page }) => {
+    test(`${path} defaults to columns regardless of ${dominant} dominance and offers automatic`, async ({ page }) => {
       await mockNews(page, dominant)
       await page.goto(path)
-      await expectAutomatic(page, dominant)
-      await selectDefault(page, "columns")
       await expectColumns(page)
       await page.reload()
       await expectColumns(page)
       await selectDefault(page, "auto")
+      await expectAutomatic(page, dominant)
+      await page.reload()
       await expectAutomatic(page, dominant)
     })
   }
@@ -192,7 +209,7 @@ for (const path of paths) {
       gridOrder: ["cat:LNG", "neutral", "bullish", "bearish"],
     }
     await page.addInitScript(({ key, value }) => {
-      sessionStorage.setItem(key, JSON.stringify(value))
+      localStorage.setItem(key, JSON.stringify(value))
     }, { key: storageKey, value: legacy })
     await page.goto(path)
     await expect(panels(page)).toHaveCount(4)

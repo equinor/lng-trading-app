@@ -23,13 +23,15 @@ Check the file `package.json` to see other available options.
 
 Both summary pages share a **Layout > Default layout** preference:
 
-- **Automatic: dominant sentiment** (initial default): gives the sentiment with the
+- **Automatic: dominant sentiment**: gives the sentiment with the
   most favourited articles in the selected date range the large panel.
-- **Three columns: Bullish / Neutral / Bearish**: equal-width columns in that order.
+- **Three columns: Bullish / Neutral / Bearish** (initial default): equal-width columns in that order.
 
-The preference and custom layouts are saved in the current browser tab's
-`sessionStorage` and survive page reloads and navigation between summary pages.
-Existing saved custom layouts remain supported.
+The preference and custom layouts are saved in the browser's `localStorage` and
+survive page reloads, closing tabs, and browser restarts. Newly opened tabs use
+the saved preference; already-open pages pick it up when reloaded or revisited.
+Preferences apply to this site in this browser, not to individual user accounts
+or other devices. Previous tab-only `sessionStorage` layouts are no longer used.
 
 Both options retain **Category sections**, allowing up to three extra categories.
 Adding categories uses the existing resizable grid arrangements. Switching the

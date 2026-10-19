@@ -148,7 +148,7 @@ export function LayoutSettingsButton(props: {
             Arrange the sentiment panels and optionally add up to {MAX_CATEGORY_SECTIONS} category sections on top.
             Drag any panel by its grip handle to rearrange it.
             {props.isCustom
-              ? " Your custom layout is saved for this browser tab."
+              ? " Your custom layout is saved in this browser."
               : props.defaultMode === "auto"
                 ? " Currently following the automatic (dominant sentiment) default."
                 : " Currently following the three-column default: Bullish, Neutral, Bearish."}
@@ -180,7 +180,7 @@ export function LayoutSettingsButton(props: {
             </div>
             <p className="text-xs text-muted-foreground">
               Selecting a default applies it to the sentiment layout without removing category sections.
-              Added categories use the grid arrangement below. This choice is shared by both summary pages for this browser tab.
+              Added categories use the grid arrangement below. This choice is shared by both summary pages and saved in this browser across visits.
             </p>
           </div>
 

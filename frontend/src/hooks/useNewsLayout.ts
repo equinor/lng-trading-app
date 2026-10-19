@@ -1,7 +1,7 @@
 // frontend/src/hooks/useNewsLayout.ts
 import { useEffect, useState } from "react"
 
-import { readJson, removeKey, writeJson } from "@/lib/storage"
+import { readJson, writeJson } from "@/lib/storage"
 import {
   defaultLayout,
   defaultGridRows,
@@ -54,13 +54,13 @@ export type UseNewsLayoutResult = {
  * to a resizable grid (2×2, 2+3, 3×3) with the category panels placed on top.
  */
 export function useNewsLayout(storageKey: string, dominant: SentimentKey): UseNewsLayoutResult {
-  const [defaultMode, setDefaultMode] = useState<DefaultLayoutMode>("auto")
+  const [defaultMode, setDefaultMode] = useState<DefaultLayoutMode>("columns")
   const [loadedStorageKey, setLoadedStorageKey] = useState<string | null>(null)
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("auto")
-  const [layoutType, setLayoutType] = useState<LayoutType>("left-big")
-  const [slots, setSlots] = useState<SentimentSlots>(["bullish", "bearish", "neutral"])
-  const [primarySplit, setPrimarySplit] = useState(56)
-  const [secondarySplit, setSecondarySplit] = useState(50)
+  const [layoutType, setLayoutType] = useState<LayoutType>("columns")
+  const [slots, setSlots] = useState<SentimentSlots>(["bullish", "neutral", "bearish"])
+  const [primarySplit, setPrimarySplit] = useState(defaultSplits("columns").primary)
+  const [secondarySplit, setSecondarySplit] = useState(defaultSplits("columns").secondary)
 
   const [categories, setCategories] = useState<string[]>([])
   const [gridRows, setGridRows] = useState<number[]>([])
@@ -70,11 +70,11 @@ export function useNewsLayout(storageKey: string, dominant: SentimentKey): UseNe
 
   // Load preferences before allowing the persistence effect to write them.
   useEffect(() => {
-    const parsed = readJson<Partial<StoredLayout>>(sessionStorage, storageKey)
+    const parsed = readJson<Partial<StoredLayout>>(localStorage, storageKey)
     setLoadedStorageKey(storageKey)
     if (!parsed || (parsed.mode !== "custom" && parsed.mode !== "auto")) return
 
-    setDefaultMode(parsed.defaultMode === "columns" ? "columns" : "auto")
+    setDefaultMode(parsed.defaultMode === "auto" ? "auto" : "columns")
     setLayoutMode(parsed.mode)
     if (parsed.layoutType) setLayoutType(parsed.layoutType)
     if (Array.isArray(parsed.slots) && parsed.slots.length === 3) {
@@ -124,10 +124,6 @@ export function useNewsLayout(storageKey: string, dominant: SentimentKey): UseNe
   // Keep the selected default alongside any custom layout and category sections.
   useEffect(() => {
     if (loadedStorageKey !== storageKey) return
-    if (layoutMode !== "custom" && defaultMode === "auto" && categories.length === 0) {
-      removeKey(sessionStorage, storageKey)
-      return
-    }
     const payload: StoredLayout = {
       mode: layoutMode,
       defaultMode,
@@ -141,7 +137,7 @@ export function useNewsLayout(storageKey: string, dominant: SentimentKey): UseNe
       rowSplits,
       colSplits,
     }
-    writeJson(sessionStorage, storageKey, payload)
+    writeJson(localStorage, storageKey, payload)
   }, [storageKey, loadedStorageKey, defaultMode, layoutMode, layoutType, slots, primarySplit, secondarySplit, categories, gridRows, gridOrder, rowSplits, colSplits])
 
   const preset = defaultLayout(defaultMode, dominant)
