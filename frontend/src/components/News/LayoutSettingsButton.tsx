@@ -18,6 +18,7 @@ import {
   gridArrangementsFor,
   LAYOUT_OPTIONS,
   MAX_CATEGORY_SECTIONS,
+  type DefaultLayoutMode,
   type LayoutType,
   type SentimentKey,
   type SentimentSlots,
@@ -104,6 +105,8 @@ function sameRows(a: number[], b: number[]): boolean {
 }
 
 export function LayoutSettingsButton(props: {
+  defaultMode: DefaultLayoutMode
+  onSelectDefault: (mode: DefaultLayoutMode) => void
   layoutType: LayoutType
   slots: SentimentSlots
   isCustom: boolean
@@ -145,12 +148,42 @@ export function LayoutSettingsButton(props: {
             Arrange the sentiment panels and optionally add up to {MAX_CATEGORY_SECTIONS} category sections on top.
             Drag any panel by its grip handle to rearrange it.
             {props.isCustom
-              ? " Your selection is saved on this device."
-              : " Currently following the automatic (dominant sentiment) layout."}
+              ? " Your custom layout is saved for this browser tab."
+              : props.defaultMode === "auto"
+                ? " Currently following the automatic (dominant sentiment) default."
+                : " Currently following the three-column default: Bullish, Neutral, Bearish."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Default layout</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={props.defaultMode === "columns" ? "default" : "outline"}
+                aria-pressed={props.defaultMode === "columns"}
+                onClick={() => props.onSelectDefault("columns")}
+              >
+                Three columns: Bullish / Neutral / Bearish
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={props.defaultMode === "auto" ? "default" : "outline"}
+                aria-pressed={props.defaultMode === "auto"}
+                onClick={() => props.onSelectDefault("auto")}
+              >
+                Automatic: dominant sentiment
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Selecting a default applies it to the sentiment layout without removing category sections.
+              Added categories use the grid arrangement below. This choice is shared by both summary pages for this browser tab.
+            </p>
+          </div>
+
           <div>
             <p className="mb-2 text-sm font-medium">
               Category sections
@@ -275,7 +308,7 @@ export function LayoutSettingsButton(props: {
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => props.onReset()}>
-            Reset to automatic
+            Reset to default
           </Button>
           <Button type="button" onClick={() => setOpen(false)}>Done</Button>
         </DialogFooter>

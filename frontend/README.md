@@ -19,6 +19,23 @@ Notice that this live server is not running inside Docker, it's for local develo
 
 Check the file `package.json` to see other available options.
 
+### News summary layouts
+
+Both summary pages share a **Layout > Default layout** preference:
+
+- **Automatic: dominant sentiment** (initial default): gives the sentiment with the
+  most favourited articles in the selected date range the large panel.
+- **Three columns: Bullish / Neutral / Bearish**: equal-width columns in that order.
+
+The preference and custom layouts are saved in the current browser tab's
+`sessionStorage` and survive page reloads and navigation between summary pages.
+Existing saved custom layouts remain supported.
+
+Both options retain **Category sections**, allowing up to three extra categories.
+Adding categories uses the existing resizable grid arrangements. Switching the
+default preserves those sections and their grid layout. **Reset to default**
+clears added categories and custom arrangements and restores the selected default.
+
 ### Removing the frontend
 
 If you are developing an API-only app and want to remove the frontend, you can do it easily:

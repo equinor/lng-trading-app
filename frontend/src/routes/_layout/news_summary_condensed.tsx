@@ -159,6 +159,8 @@ function NewsSummaryCondensed() {
           <PipelineButton />
           <div className="w-px h-5 bg-border mx-1" />
           <LayoutSettingsButton
+            defaultMode={layout.defaultMode}
+            onSelectDefault={layout.selectDefault}
             layoutType={effectiveLayoutType}
             slots={effectiveSlots}
             isCustom={layoutMode === "custom"}

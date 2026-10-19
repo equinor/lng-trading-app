@@ -13,6 +13,7 @@ export type GroupedRows = Record<SentimentKey, RowWithReadTime[]>
 
 export type LayoutType = "left-big" | "right-big" | "top-big" | "bottom-big" | "columns"
 export type LayoutMode = "auto" | "custom"
+export type DefaultLayoutMode = "auto" | "columns"
 export type SentimentSlots = [SentimentKey, SentimentKey, SentimentKey]
 
 /** A panel in a summary layout: either a sentiment bucket or a category bucket. */
@@ -37,6 +38,7 @@ export const MAX_CATEGORY_SECTIONS = 3
 
 export type StoredLayout = {
   mode: LayoutMode
+  defaultMode?: DefaultLayoutMode
   layoutType: LayoutType
   slots: SentimentSlots
   primarySplit: number
@@ -136,6 +138,15 @@ export function autoLayout(dominant: SentimentKey): { layoutType: LayoutType; sl
   if (dominant === "bullish") return { layoutType: "left-big", slots: ["bullish", "bearish", "neutral"] }
   if (dominant === "bearish") return { layoutType: "right-big", slots: ["bearish", "bullish", "neutral"] }
   return { layoutType: "bottom-big", slots: ["neutral", "bullish", "bearish"] }
+}
+
+export function defaultLayout(
+  mode: DefaultLayoutMode,
+  dominant: SentimentKey,
+): { layoutType: LayoutType; slots: SentimentSlots } {
+  return mode === "columns"
+    ? { layoutType: "columns", slots: ["bullish", "neutral", "bearish"] }
+    : autoLayout(dominant)
 }
 
 export function defaultSplits(layoutType: LayoutType): { primary: number; secondary: number } {
