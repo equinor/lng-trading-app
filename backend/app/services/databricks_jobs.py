@@ -122,6 +122,9 @@ def get_last_run() -> dict:
         timeout=_DEFAULT_TIMEOUT,
         verify=_ssl_verify(),
     )
+    if resp.status_code >= 400:
+        # The body states the real cause (IP access list, SP not in workspace, invalid token).
+        logger.error("Databricks jobs/runs/list %s: %s", resp.status_code, resp.text[:500])
     resp.raise_for_status()
     runs = resp.json().get("runs") or []
     if not runs:
