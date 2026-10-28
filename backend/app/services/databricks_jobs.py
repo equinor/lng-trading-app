@@ -67,11 +67,10 @@ def _aad_token() -> str | None:
 
 
 def _bearer_token() -> str | None:
-    if settings.DATABRICKS_TOKEN:
-        return settings.DATABRICKS_TOKEN
+    # Same precedence as the SQL connection (core/databricks.py): the SP wins over a PAT.
     if settings.DATABRICKS_USE_SERVICE_PRINCIPAL:
         return _aad_token()
-    return None
+    return settings.DATABRICKS_TOKEN or None
 
 
 def _is_configured() -> bool:
