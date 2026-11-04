@@ -200,6 +200,92 @@ Write failures are only logged. They are not shown in the UI.
 - `POST /news/email-summary`: builds an email from the favourited articles (`services/email_service.py`) and sends it in the background. Needs the Writer role and the Atlas email settings.
 - `GET /news/pipeline/last-run` and `POST /news/pipeline/trigger`: read the status of, and start, the Databricks ingestion job through the Jobs REST API (`services/databricks_jobs.py`). Trigger returns 503 when Databricks is not configured.
 
+## Authentication and Access Control
+
+Sign-in is handled outside the app by the Radix OAuth2 proxy and Azure AD. Read and write access comes from Azure AD app roles on the app's Enterprise application. There is no user table in this app, and nothing is synced into a database.
+
+```mermaid
+flowchart LR
+    A["Entra group membership<br/>fg_MMP GP LNG / fg_lng_analytics_admins"] --> B["Enterprise application<br/>Users and groups: group -> app role"]
+    B --> C["At sign-in, Azure AD puts<br/>roles: [Reader] / [Writer] in the token"]
+    C --> D["Radix OAuth2 proxy<br/>setAuthorizationHeader: true"]
+    D --> E["nginx forwards Authorization<br/>and X-Auth-Request-* to the backend"]
+    E --> F["api/deps.py<br/>get_current_user + _decode_roles"]
+    F --> G["require_reader / require_writer<br/>on each endpoint"]
+```
+
+### Current role assignments
+
+Configured in the Azure portal, Enterprise application `lng-trading-app`, Users and groups:
+
+| Group | Role | Effect in the app |
+|-------|------|-------------------|
+| `fg_MMP GP LNG` | Reader | Can sign in and read |
+| `fg_lng_analytics_admins` | Writer | Can sign in, read and write |
+
+### How access is decided
+
+Every request is checked in `get_current_user` in `backend/app/api/deps.py`. The backend is stateless and works out the user from the headers on each request.
+
+| Rule | Source |
+|------|--------|
+| Sign-in allowed | Enterprise application: "Assignment required" plus the users and groups assigned to it |
+| Email domain | Must end with `ALLOWED_EMAIL_DOMAIN` (default `equinor.com`), otherwise 403 |
+| Read | Any signed-in user who passes the domain check. The `Reader` role is not checked in code; it only gates sign-in. |
+| Write | The token's `roles` claim contains `Writer` (any role value containing "writ" or "admin" also counts) |
+| Break-glass writer | The email equal to `FIRST_SUPERUSER`, set in `radixconfig.yaml` |
+
+Which endpoint needs what:
+
+| Requirement | Endpoints |
+|-------------|-----------|
+| Reader (signed in) | `GET /news/`, `GET /news/facets`, `GET /news/pipeline/last-run` |
+| Writer | The four `PATCH /news/{id}/...` routes, `POST /news/email-summary`, `POST /news/pipeline/trigger` |
+| Signed-in user only | `GET /utils/me` |
+| None | `GET /utils/health-check` |
+
+The read check is applied to a whole router (`APIRouter(dependencies=[Depends(require_reader)])`). Write routes take a `user: WriterUser` parameter, which runs the write check and passes the user to the function. The user's email is written to the log when an article is changed. It is not stored in the database.
+
+### How and where to add or change roles
+
+Access changes are made in Azure, not in this repo. You need to be an owner of the Enterprise application, or have an Entra role such as Application Administrator.
+
+**Give or remove access for a person**
+
+1. Add the person to the right Entra group: `fg_MMP GP LNG` for read access, `fg_lng_analytics_admins` for read and write. Remove them from the group to take access away.
+2. Ask them to sign out and in again (`/oauth2/sign_out`). Roles are put into the token at sign-in, so the change is not visible until they do.
+
+**Assign a new group or user to the app, or change an existing assignment**
+
+1. Open the Azure portal, then Microsoft Entra ID, Enterprise applications, `lng-trading-app`, Users and groups.
+2. To add one, select **Add user/group**, pick the user or group, select the role (`Reader` or `Writer`) and assign.
+3. To change a role, select the row and choose **Edit assignment**. To remove access, choose **Remove assignment**.
+
+**Check the result**
+
+Open `/api/v1/utils/me` on the deployed app. It returns your email, `roles`, `can_read` and `can_write`.
+
+**Define a new role** (for example `Admin`)
+
+1. In the Azure portal, open the App registration for this app (the client ID is the `clientId` under `oauth2` in `radixconfig.yaml`), then App roles, Create app role. Set the display name, the **value** (this is what appears in the token), and allowed member types "Users/Groups".
+2. Assign the new role to a group in the Enterprise application as described above.
+3. Update the backend: add the role value in `api/deps.py` (next to `WRITER_ROLE` and `READER_ROLE`), include it in `get_current_user` or `_is_writer`, and add a `require_<role>` dependency for endpoints that need it.
+
+**Other settings**
+
+- `FIRST_SUPERUSER` (a variable in `radixconfig.yaml`): this email always gets write access, regardless of roles.
+- `ALLOWED_EMAIL_DOMAIN` (`backend/app/core/config.py`): the allowed email domain. Set it to an empty string to allow any signed-in email.
+- Enterprise application, Properties, "Assignment required": when on, only assigned users and groups can sign in at all.
+
+### Limits and caveats
+
+- **Nested groups:** Azure does not pass an app role down to nested groups. Only direct members of an assigned group get the role.
+- **Locally:** there is no proxy, so every request is the dev user `analyst@example.com` with full access. Roles cannot be tested locally without a proxy in front.
+- **Fails open without the proxy:** if a request reaches the backend with no email header, it gets the full-access dev user. This is intended locally. In Radix, keep the backend component without a public port so requests must pass through the proxy.
+- **Token is not verified in the backend:** `_decode_roles` reads the roles from the token without checking its signature, because it trusts the proxy to have validated the token.
+- **UI:** the frontend does not hide write controls for read-only users. They get a 403 from the backend when they try to write.
+- **Unused template code:** the Postgres user table, the Admin components and the `Admin` sidebar item are leftovers from the template. They are not connected to access control.
+
 ## Adding a New Page
 
 Each page is its own vertical slice: a route, a service and a repository on the backend, and a page, an API module and components on the frontend. Slices share only auth, the Databricks connection and the cache.
