@@ -1,14 +1,9 @@
 # backend/app/services/databricks_jobs.py
-"""Trigger the Databricks news pipeline and read its last-run status via the Jobs REST API.
-
-When Databricks is not configured (e.g. NEWS_BACKEND=mock or missing job id/token), the
-module falls back to an in-memory mock so the "Run pipeline" button still works locally.
-"""
+"""Trigger the Databricks news pipeline and read its last-run status via the Jobs REST API."""
 
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timezone
 
 import httpx
@@ -18,9 +13,6 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT = 30.0
-
-# In-memory fallback state for mock / unconfigured environments.
-_mock_last_run: dict | None = None
 
 
 def _ssl_verify() -> str | bool:
@@ -73,7 +65,7 @@ def _bearer_token() -> str | None:
     return settings.DATABRICKS_TOKEN or None
 
 
-def _is_configured() -> bool:
+def is_configured() -> bool:
     return bool(_workspace_host() and settings.DATABRICKS_JOB_ID)
 
 
@@ -105,13 +97,13 @@ def _headers(token: str) -> dict:
 
 def get_last_run() -> dict:
     """Return the most recent pipeline run status."""
-    if not _is_configured():
-        return _mock_last_run or _empty_status(False)
+    if not is_configured():
+        return _empty_status(False)
 
     host = _workspace_host()
     token = _bearer_token()
     if not (host and token):
-        return _mock_last_run or _empty_status(False)
+        return _empty_status(False)
 
     print("CA bundle:", repr(settings.DATABRICKS_CA_BUNDLE), "| verify:", _ssl_verify(), flush=True)
     resp = httpx.get(
@@ -144,21 +136,6 @@ def get_last_run() -> dict:
 
 def trigger_run() -> dict:
     """Start a new pipeline run. Returns the created run id."""
-    global _mock_last_run
-
-    if not _is_configured():
-        now_iso = datetime.now(tz=timezone.utc).isoformat()
-        _mock_last_run = {
-            "configured": False,
-            "run_id": int(time.time()),
-            "state": "TERMINATED",
-            "result": "SUCCESS",
-            "start_time": now_iso,
-            "end_time": now_iso,
-            "run_url": None,
-        }
-        return {"ok": True, "run_id": _mock_last_run["run_id"]}
-
     host = _workspace_host()
     token = _bearer_token()
     if not (host and token):

@@ -15,11 +15,14 @@ from __future__ import annotations
 import base64
 import json
 import logging
+from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
 
 from app.core.config import settings
+from app.repositories.news_repository import NewsRepository
+from app.services.news_service import NewsService
 
 logger = logging.getLogger(__name__)
 
@@ -141,3 +144,12 @@ def require_writer(user: CurrentUser) -> dict:
 
 ReaderUser = Annotated[dict, Depends(require_reader)]
 WriterUser = Annotated[dict, Depends(require_writer)]
+
+
+@lru_cache
+def get_news_service() -> NewsService:
+    # One instance per process so its dataset cache is shared across requests.
+    return NewsService(NewsRepository())
+
+
+NewsServiceDep = Annotated[NewsService, Depends(get_news_service)]

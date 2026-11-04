@@ -82,14 +82,6 @@ class Settings(BaseSettings):
     NEWS_TABLE: str = "lng_apac.news_state"
 
     SENTRY_DSN: str | None = None
-    NEWS_BACKEND: str = "mock"
-
-    # --- Mock backend tuning ---
-    MOCK_NEWS_SEED_COUNT: int = 12
-    MOCK_NEWS_MAX_TAGS: int = 3
-    MOCK_NEWS_TAG_NONE_PROBABILITY: float = 0.15
-    MOCK_NEWS_REGION_NONE_PROBABILITY: float = 0.15
-    MOCK_NEWS_SOURCE: str = "mock"
 
     # --- Equinor Atlas Email ---
     ATLAS_TENANT_ID: str = "3aa4a235-b6e2-48d5-9195-7fcf05b459b0"

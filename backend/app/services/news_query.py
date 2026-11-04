@@ -1,9 +1,8 @@
 # backend/app/services/news_query.py
 """Shared server-side filtering, sorting and pagination for the news feed.
 
-Operates on already-normalized row dicts (category/region as lists) so both the
-mock and Databricks repositories can reuse identical semantics — matching what
-the Newsletter page used to do on the client.
+Operates on already-normalized row dicts (category/region as lists), as the
+Newsletter page used to do on the client.
 """
 from __future__ import annotations
 
