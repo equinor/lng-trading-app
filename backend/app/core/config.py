@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     # UC table name you are using
     NEWS_TABLE: str = "lng_apac.news_state"
 
+    # Platts facility-level daily pipeline flow data (feedgas nominations)
+    PIPELINE_NOMINATIONS_TABLE: str = (
+        "ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data"
+    )
+
     SENTRY_DSN: str | None = None
 
     # --- Equinor Atlas Email ---

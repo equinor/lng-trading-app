@@ -28,6 +28,7 @@ spec:
         - DATABRICKS_WORKSPACE_RESOURCE_ID
       variables:
         NEWS_TABLE: ms_vulcan_gplng_plab.trader_news_app.platts_lng_top_news
+        PIPELINE_NOMINATIONS_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data
         DATABRICKS_USE_SERVICE_PRINCIPAL: "true"
         DATABRICKS_WORKSPACE_URL: adb-1023210238843247.7.azuredatabricks.net
         DATABRICKS_JOB_ID: "93951735174333"

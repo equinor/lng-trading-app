@@ -197,8 +197,40 @@ Write failures are only logged. They are not shown in the UI.
 ### Other endpoints
 
 - `GET /news/facets`: distinct categories and regions for the filter dropdowns.
+- `GET /pipeline-nominations/filters` and `GET /pipeline-nominations/overview`: data for the Pipeline Nominations page (see below).
 - `POST /news/email-summary`: builds an email from the favourited articles (`services/email_service.py`) and sends it in the background. Needs the Writer role and the Atlas email settings.
 - `GET /news/pipeline/last-run` and `POST /news/pipeline/trigger`: read the status of, and start, the Databricks ingestion job through the Jobs REST API (`services/databricks_jobs.py`). Trigger returns 503 when Databricks is not configured.
+
+## Pipeline Nominations page
+
+The page at `/pipeline_nominations` reproduces the "Platts US Daily Pipeline Nominations (Monthly)" report. It follows the vertical-slice layout described under "Adding a New Page".
+
+| Part | File |
+|------|------|
+| Route (HTTP only) | `backend/app/api/routes/pipeline_nominations.py` |
+| Service (cache, daily series, monthly matrix, month-on-month %) | `backend/app/services/pipeline_nominations_service.py` |
+| Repository (one SQL query) | `backend/app/repositories/pipeline_nominations_repository.py` |
+| Response models | `backend/app/schemas/pipeline_nominations.py` |
+| API calls and types | `frontend/src/services/pipeline_nominations/pipeline_nominations_api.ts` |
+| Page | `frontend/src/routes/_layout/pipeline_nominations.tsx` |
+| Components | `frontend/src/components/PipelineNominations/` (`PipelineFilter`, `FlowChart`, `MonthlyMatrix`) |
+
+**Data.** The source is the table in `PIPELINE_NOMINATIONS_TABLE` (`ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data`). The service account used by the backend needs `SELECT` on it. The repository runs one query that sums `Vol_BCF` per facility (`name`), pipeline (`pipelineName`, trimmed) and day over the last 13 months. The service caches that result for 15 minutes and derives everything else from it in memory.
+
+**Endpoints** (Reader role):
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /api/v1/pipeline-nominations/filters` | Facilities with their pipelines, and the latest data date |
+| `GET /api/v1/pipeline-nominations/overview?selected=Facility::Pipeline\|Facility::Pipeline` | The 14-day and 180-day daily series per facility, and the monthly matrix. An empty `selected` means everything. |
+
+**Behaviour to know about**
+
+- The 14 and 180 day windows end at the latest date in the data, not at today's date, so the charts are never empty when the feed is a few days behind.
+- Month columns come from the whole dataset, so they stay the same while filtering.
+- The % columns are month-on-month changes. They are blank when the previous month is missing or zero.
+- The latest month is marked with `*` and shown in italics when the data stops before month end, because its % change compares a partial month with a full one.
+- The filter works like a Power BI slicer: ticking a facility selects all of its pipelines, expanding it lets you pick individual pipelines, and nothing ticked means everything.
 
 ## Authentication and Access Control
 
@@ -239,7 +271,7 @@ Which endpoint needs what:
 
 | Requirement | Endpoints |
 |-------------|-----------|
-| Reader (signed in) | `GET /news/`, `GET /news/facets`, `GET /news/pipeline/last-run` |
+| Reader (signed in) | `GET /news/`, `GET /news/facets`, `GET /news/pipeline/last-run`, `GET /pipeline-nominations/filters`, `GET /pipeline-nominations/overview` |
 | Writer | The four `PATCH /news/{id}/...` routes, `POST /news/email-summary`, `POST /news/pipeline/trigger` |
 | Signed-in user only | `GET /utils/me` |
 | None | `GET /utils/health-check` |
@@ -426,15 +458,17 @@ lng-trading-app/
 │   │   ├── main.py             # Entry point, middleware, router registration
 │   │   ├── api/
 │   │   │   ├── deps.py          # Auth (roles) and service providers (dependency injection)
-│   │   │   └── routes/          # Thin HTTP endpoints: news, pipeline, utils
+│   │   │   └── routes/          # Thin HTTP endpoints: news, pipeline, pipeline_nominations, utils
 │   │   ├── services/           # Business logic
 │   │   │   ├── news_service.py           # Dataset cache, optimistic updates, background writes
 │   │   │   ├── news_query.py             # Filtering, sorting, pagination
 │   │   │   ├── email_service.py          # Summary email builder
+│   │   │   ├── pipeline_nominations_service.py  # Pipeline nominations: cached snapshot, daily series, monthly matrix
 │   │   │   ├── databricks_jobs.py        # Pipeline trigger / status (Jobs REST API)
 │   │   │   └── normalization.py          # Shared data normalization utilities
 │   │   ├── repositories/
-│   │   │   └── news_repository.py        # SQL access to the news table
+│   │   │   ├── news_repository.py        # SQL access to the news table
+│   │   │   └── pipeline_nominations_repository.py  # SQL access to the Platts flow table
 │   │   ├── core/
 │   │   │   ├── config.py        # All configuration (loaded from .env)
 │   │   │   ├── cache.py         # TTLCache and PendingOverrides
@@ -449,7 +483,8 @@ lng-trading-app/
 │   │   ├── routes/             # TanStack Router file-based routes
 │   │   │   └── _layout/
 │   │   │       ├── newsletter.tsx      # Main news feed with analyst controls
-│   │   │       └── news_summary.tsx    # Favourited news summary dashboard
+│   │   │       ├── news_summary.tsx    # Favourited news summary dashboard
+│   │   │       └── pipeline_nominations.tsx  # Platts US daily pipeline nominations (monthly)
 │   │   ├── components/         # UI components (shadcn/ui based)
 │   │   ├── services/           # API client and news service modules
 │   │   │   └── news/
@@ -484,6 +519,7 @@ lng-trading-app/
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NEWS_TABLE` | `ms_vulcan_gplng_plab.trader_news_app.platts_lng_top_news` | Unity Catalog table name |
+| `PIPELINE_NOMINATIONS_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data` | Platts facility-level daily flow table |
 | `SECRET_KEY` | random | JWT signing key |
 | `BACKEND_CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
 | `FIRST_SUPERUSER` | `admin@example.com` | Default admin user email |

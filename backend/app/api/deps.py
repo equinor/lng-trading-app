@@ -22,7 +22,9 @@ from fastapi import Depends, HTTPException, Request
 
 from app.core.config import settings
 from app.repositories.news_repository import NewsRepository
+from app.repositories.pipeline_nominations_repository import PipelineNominationsRepository
 from app.services.news_service import NewsService
+from app.services.pipeline_nominations_service import PipelineNominationsService
 
 logger = logging.getLogger(__name__)
 
@@ -153,3 +155,13 @@ def get_news_service() -> NewsService:
 
 
 NewsServiceDep = Annotated[NewsService, Depends(get_news_service)]
+
+
+@lru_cache
+def get_pipeline_nominations_service() -> PipelineNominationsService:
+    return PipelineNominationsService(PipelineNominationsRepository())
+
+
+PipelineNominationsServiceDep = Annotated[
+    PipelineNominationsService, Depends(get_pipeline_nominations_service)
+]
