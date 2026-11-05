@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Literal
 
 from pydantic import BaseModel
+
+Source = Literal["platts", "woodmac"]
 
 
 class FacilityFilter(BaseModel):
@@ -25,38 +28,38 @@ class DailySeries(BaseModel):
     points: list[DailyPoint]
 
 
-class MonthMeta(BaseModel):
-    key: str  # YYYY-MM
-    year: int
-    month: int
-    label: str
+class ColumnMeta(BaseModel):
+    key: str
+    group: str  # header above the column: the year for months, month and year for days
+    label: str  # month abbreviation, or day of month
     partial: bool  # latest month with data that has not reached month end
 
 
-class MonthCell(BaseModel):
+class MatrixCell(BaseModel):
     bcf: float | None
-    mom_pct: float | None
+    change_pct: float | None  # against the previous column (month or day)
 
 
 class PipelineRow(BaseModel):
     name: str
-    cells: list[MonthCell]
+    cells: list[MatrixCell]
 
 
 class FacilityRow(BaseModel):
     name: str
-    cells: list[MonthCell]
+    cells: list[MatrixCell]
     pipelines: list[PipelineRow]
 
 
-class MonthlyTable(BaseModel):
-    months: list[MonthMeta]
+class MatrixTable(BaseModel):
+    columns: list[ColumnMeta]
     facilities: list[FacilityRow]
-    total: list[MonthCell]
+    total: list[MatrixCell]
 
 
 class OverviewResponse(BaseModel):
     latest_date: dt.date | None
     daily_14: list[DailySeries]
     daily_180: list[DailySeries]
-    monthly: MonthlyTable
+    monthly_table: MatrixTable
+    daily_table: MatrixTable

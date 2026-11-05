@@ -11,44 +11,49 @@ export type FiltersResponse = {
 export type DailyPoint = { flow_date: string; bcf: number }
 export type DailySeries = { name: string; points: DailyPoint[] }
 
-export type MonthMeta = {
+export type ColumnMeta = {
   key: string
-  year: number
-  month: number
+  group: string
   label: string
   partial: boolean
 }
-export type MonthCell = { bcf: number | null; mom_pct: number | null }
-export type PipelineRow = { name: string; cells: MonthCell[] }
+export type MatrixCell = { bcf: number | null; change_pct: number | null }
+export type PipelineRow = { name: string; cells: MatrixCell[] }
 export type FacilityRow = {
   name: string
-  cells: MonthCell[]
+  cells: MatrixCell[]
   pipelines: PipelineRow[]
 }
-export type MonthlyTable = {
-  months: MonthMeta[]
+export type MatrixTable = {
+  columns: ColumnMeta[]
   facilities: FacilityRow[]
-  total: MonthCell[]
+  total: MatrixCell[]
 }
 
 export type OverviewResponse = {
   latest_date: string | null
   daily_14: DailySeries[]
   daily_180: DailySeries[]
-  monthly: MonthlyTable
+  monthly_table: MatrixTable
+  daily_table: MatrixTable
 }
+
+export type Source = "platts" | "woodmac"
 
 // Backend pairs are "facility::pipeline", joined with "|".
 export const selectionToken = (facility: string, pipeline: string) =>
   `${facility}::${pipeline}`
 
-export function getFilters(): Promise<FiltersResponse> {
-  return apiRequest<FiltersResponse>(`${BASE}/filters`)
+export function getFilters(source: Source): Promise<FiltersResponse> {
+  return apiRequest<FiltersResponse>(`${BASE}/filters`, { query: { source } })
 }
 
 /** An empty selection means all facilities and pipelines. */
-export function getOverview(selected: string[]): Promise<OverviewResponse> {
+export function getOverview(
+  source: Source,
+  selected: string[],
+): Promise<OverviewResponse> {
   return apiRequest<OverviewResponse>(`${BASE}/overview`, {
-    query: selected.length ? { selected: selected.join("|") } : undefined,
+    query: { source, ...(selected.length ? { selected: selected.join("|") } : {}) },
   })
 }

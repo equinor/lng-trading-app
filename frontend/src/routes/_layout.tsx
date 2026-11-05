@@ -25,16 +25,17 @@ function Layout() {
     select: (state) => state.location.pathname,
   })
   const isNewsSummaryRoute = pathname === "/news_summary" || pathname === "/news_summary_condensed"
+  const isWideRoute = isNewsSummaryRoute || pathname === "/pipeline_nominations"
 
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1 text-muted-foreground" />
         </header>
         <main className={`flex-1 ${isNewsSummaryRoute ? "p-4 overflow-hidden" : "p-6 md:p-8"}`}>
-          <div className={`mx-auto w-full h-full ${isNewsSummaryRoute ? "max-w-none" : "max-w-7xl"}`}>
+          <div className={`mx-auto w-full h-full ${isWideRoute ? "max-w-none" : "max-w-7xl"}`}>
             <Outlet />
           </div>
         </main>

@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends
 
 from app.api.dependencies import require_reader
 from app.features.pipeline_nominations.dependencies import PipelineNominationsServiceDep
-from app.features.pipeline_nominations.schemas import FiltersResponse, OverviewResponse
+from app.features.pipeline_nominations.schemas import (
+    FiltersResponse,
+    OverviewResponse,
+    Source,
+)
 from app.features.pipeline_nominations.service import Selection
 
 router = APIRouter(dependencies=[Depends(require_reader)])
@@ -24,12 +28,16 @@ def _parse_selection(selected: str | None) -> Selection:
 
 
 @router.get("/filters", response_model=FiltersResponse)
-def get_filters(service: PipelineNominationsServiceDep):
-    """Facilities and their pipelines, for the filter tree."""
-    return service.filters()
+def get_filters(service: PipelineNominationsServiceDep, source: Source = "woodmac"):
+    """Facilities and their pipelines for one data source, for the filter tree."""
+    return service.filters(source)
 
 
 @router.get("/overview", response_model=OverviewResponse)
-def get_overview(service: PipelineNominationsServiceDep, selected: str | None = None):
-    """Daily flow charts and the monthly matrix, optionally limited to selected facility::pipeline pairs."""
-    return service.overview(_parse_selection(selected))
+def get_overview(
+    service: PipelineNominationsServiceDep,
+    source: Source = "woodmac",
+    selected: str | None = None,
+):
+    """Daily flow charts and the monthly and daily tables, optionally limited to selected facility::pipeline pairs."""
+    return service.overview(source, _parse_selection(selected))

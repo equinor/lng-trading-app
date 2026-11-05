@@ -209,36 +209,46 @@ Write failures are only logged. They are not shown in the UI.
 
 ## Pipeline Nominations page
 
-The page at `/pipeline_nominations` reproduces the "Platts US Daily Pipeline Nominations (Monthly)" report. It is a feature folder on each side, as described under "Adding a New Page".
+The page at `/pipeline_nominations` reproduces the "Platts US Daily Pipeline Nominations (Monthly)" report and shows the same views from a second provider, WoodMac Genscape. A toggle in the page header switches between the two. It is a feature folder on each side, as described under "Adding a New Page".
 
 | Part | File |
 |------|------|
 | Route (HTTP only) | `backend/app/features/pipeline_nominations/router.py` |
-| Service (cache, daily series, monthly matrix, month-on-month %) | `backend/app/features/pipeline_nominations/service.py` |
-| Repository (one SQL query) | `backend/app/features/pipeline_nominations/repository.py` |
+| Service (cache, daily series, monthly and daily tables, % change) | `backend/app/features/pipeline_nominations/service.py` |
+| Repository (one SQL query per source) | `backend/app/features/pipeline_nominations/repository.py` |
 | Response models | `backend/app/features/pipeline_nominations/schemas.py` |
 | Service provider | `backend/app/features/pipeline_nominations/dependencies.py` |
 | API calls and types | `frontend/src/features/pipeline_nominations/api.ts` |
 | Page | `frontend/src/features/pipeline_nominations/pages/PipelineNominationsPage.tsx` |
 | Route (URL and title) | `frontend/src/routes/_layout/pipeline_nominations.tsx` |
-| Components | `frontend/src/features/pipeline_nominations/components/` (`PipelineFilter`, `FlowChart`, `MonthlyMatrix`) |
+| Components | `frontend/src/features/pipeline_nominations/components/` (`PipelineFilter`, `FlowChart`, `NominationsMatrix`) |
 
-**Data.** The source is the table in `PIPELINE_NOMINATIONS_TABLE` (`ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data`). The service account used by the backend needs `SELECT` on it. The repository runs one query that sums `Vol_BCF` per facility (`name`), pipeline (`pipelineName`, trimmed) and day over the last 13 months. The service caches that result for 15 minutes and derives everything else from it in memory.
+**Data.** Two tables, one per `source`. The service account used by the backend needs `SELECT` on both.
+
+| Source | Setting | Default table | Volume column |
+|--------|---------|---------------|---------------|
+| `platts` | `PIPELINE_NOMINATIONS_PLATTS_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data` | `Vol_BCF`, per `name` (facility), `pipelineName`, `flowDate` |
+| `woodmac` | `PIPELINE_NOMINATIONS_WOODMAC_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles` | `Nominated_VolBCF`, per `LNG_Plant_Name` (facility), `pipelineName`, `gasDay` |
+
+Each repository query returns the same row shape (facility, pipeline, day, BCF) over the last 13 months, so the service and the page treat both sources alike. For WoodMac the query keeps only the latest row (by `insertTimestamp`) for each pipeline, location and day, so nomination cycles are never added together. The service caches each source for 15 minutes and derives everything else from it in memory.
 
 **Endpoints** (Reader role):
 
 | Endpoint | Returns |
 |----------|---------|
-| `GET /api/v1/pipeline-nominations/filters` | Facilities with their pipelines, and the latest data date |
-| `GET /api/v1/pipeline-nominations/overview?selected=Facility::Pipeline\|Facility::Pipeline` | The 14-day and 180-day daily series per facility, and the monthly matrix. An empty `selected` means everything. |
+| `GET /api/v1/pipeline-nominations/filters?source=platts\|woodmac` | Facilities with their pipelines, and the latest data date, for one source (default `woodmac`) |
+| `GET /api/v1/pipeline-nominations/overview?source=platts\|woodmac&selected=Facility::Pipeline\|Facility::Pipeline` | The 14-day and 180-day daily series per facility, plus two tables with the same shape: `monthly_table` (one column per month) and `daily_table` (one column per day for the last 14 days). An empty `selected` means everything. `source` defaults to `woodmac`. |
 
 **Behaviour to know about**
 
 - The 14 and 180 day windows end at the latest date in the data, not at today's date, so the charts are never empty when the feed is a few days behind.
 - Month columns come from the whole dataset, so they stay the same while filtering.
-- The % columns are month-on-month changes. They are blank when the previous month is missing or zero.
+- The table has a toggle between **Month on month** and **Day on day**. Both tables arrive in the same response, so switching is instant. The number of day columns is `_DAILY_TABLE_DAYS` in the service.
+- The % columns are changes against the previous column: the previous month, or the previous day. They are blank when the previous value is missing or zero. In the day view the first column's % still uses the day before the window.
 - The latest month is marked with `*` and shown in italics when the data stops before month end, because its % change compares a partial month with a full one.
 - The filter works like a Power BI slicer: ticking a facility selects all of its pipelines, expanding it lets you pick individual pipelines, and nothing ticked means everything.
+- Switching source clears the filter, because pipeline names differ between providers. Each source has its own latest date, so the chart windows and the day columns end at that source's last day. The facility lists differ too (WoodMac has Cove Point and no Costa Azul or LNG Canada).
+- The latest WoodMac day usually holds an early nomination cycle, so it can still change.
 
 ## Authentication and Access Control
 
@@ -512,7 +522,7 @@ lng-trading-app/
 │   │   │   │   ├── api.ts       # API functions (getNews, patch*)
 │   │   │   │   ├── utils.ts     # Helpers (formatTime, cleanTagValue, etc.)
 │   │   │   │   └── layout.ts    # Layout and grouping logic
-│   │   │   └── pipeline_nominations/   # pages, components (PipelineFilter, FlowChart, MonthlyMatrix), api.ts, utils.ts
+│   │   │   └── pipeline_nominations/   # pages, components (PipelineFilter, FlowChart, NominationsMatrix), api.ts, utils.ts
 │   │   ├── components/         # Shared UI: ui/ (shadcn), Common/, Sidebar/
 │   │   ├── hooks/              # Shared hooks (useAuth, useDateFilter, useEquinorFont, ...)
 │   │   ├── services/api_client.ts   # fetch wrapper used by every feature's api.ts
@@ -545,7 +555,8 @@ lng-trading-app/
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NEWS_TABLE` | `ms_vulcan_gplng_plab.trader_news_app.platts_lng_top_news` | Unity Catalog table name |
-| `PIPELINE_NOMINATIONS_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data` | Platts facility-level daily flow table |
+| `PIPELINE_NOMINATIONS_PLATTS_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data` | Platts facility-level daily flow table |
+| `PIPELINE_NOMINATIONS_WOODMAC_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles` | WoodMac Genscape pipeline nominations table |
 | `SECRET_KEY` | random | JWT signing key |
 | `BACKEND_CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
 | `FIRST_SUPERUSER` | `admin@example.com` | Default admin user email |

@@ -81,9 +81,12 @@ class Settings(BaseSettings):
     # UC table name you are using
     NEWS_TABLE: str = "lng_apac.news_state"
 
-    # Platts facility-level daily pipeline flow data (feedgas nominations)
-    PIPELINE_NOMINATIONS_TABLE: str = (
+    # Pipeline nominations to LNG plants, from two providers
+    PIPELINE_NOMINATIONS_PLATTS_TABLE: str = (
         "ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data"
+    )
+    PIPELINE_NOMINATIONS_WOODMAC_TABLE: str = (
+        "ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles"
     )
 
     SENTRY_DSN: str | None = None

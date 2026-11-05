@@ -9,10 +9,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { cn } from "@/lib/utils"
 import type {
-  MonthCell,
-  MonthlyTable,
+  MatrixCell,
+  MatrixTable,
 } from "@/features/pipeline_nominations/api"
 import {
   formatBcf,
@@ -20,10 +19,20 @@ import {
   formatPct,
   pctDirection,
 } from "@/features/pipeline_nominations/utils"
+import { cn } from "@/lib/utils"
+
+export type MatrixPeriod = "month" | "day"
 
 type Props = {
-  table: MonthlyTable
+  table: MatrixTable
+  period: MatrixPeriod
   latestDate: string | null
+}
+
+// The header stays "%" so the columns keep their narrow width; the page subtitle and tooltip say which period.
+const CHANGE_HEADER: Record<MatrixPeriod, { label: string; title: string }> = {
+  month: { label: "%", title: "Change against the previous month" },
+  day: { label: "%", title: "Change against the previous day" },
 }
 
 const PCT_COLOR = {
@@ -32,15 +41,15 @@ const PCT_COLOR = {
   flat: "text-muted-foreground",
 }
 
-const CELL = "px-2 py-1 text-right tabular-nums"
-const HEAD = "h-8 px-2 text-center normal-case"
+const CELL = "px-1 py-1 text-right tabular-nums"
+const HEAD = "h-8 px-1 text-center normal-case"
 
 function CellPair({
   cell,
   partial,
   bold,
 }: {
-  cell: MonthCell | undefined
+  cell: MatrixCell | undefined
   partial: boolean
   bold?: boolean
 }) {
@@ -61,18 +70,19 @@ function CellPair({
           "text-xs",
           partial
             ? "italic text-muted-foreground"
-            : PCT_COLOR[pctDirection(cell?.mom_pct ?? null)],
+            : PCT_COLOR[pctDirection(cell?.change_pct ?? null)],
         )}
       >
-        {formatPct(cell?.mom_pct ?? null)}
+        {formatPct(cell?.change_pct ?? null)}
       </TableCell>
     </>
   )
 }
 
-export function MonthlyMatrix({ table, latestDate }: Props) {
+export function NominationsMatrix({ table, period, latestDate }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  const { months } = table
+  const { columns } = table
+  const change = CHANGE_HEADER[period]
 
   const toggle = (name: string) => {
     const next = new Set(collapsed)
@@ -80,12 +90,13 @@ export function MonthlyMatrix({ table, latestDate }: Props) {
     setCollapsed(next)
   }
 
-  const yearGroups = months.reduce<{ year: number; count: number }[]>(
-    (groups, month) => {
-      const last = groups[groups.length - 1]
-      if (last?.year === month.year) last.count += 1
-      else groups.push({ year: month.year, count: 1 })
-      return groups
+  // Consecutive columns that share a group (a year for months, a month for days) get one header.
+  const groups = columns.reduce<{ group: string; count: number }[]>(
+    (acc, column) => {
+      const last = acc[acc.length - 1]
+      if (last?.group === column.group) last.count += 1
+      else acc.push({ group: column.group, count: 1 })
+      return acc
     },
     [],
   )
@@ -98,7 +109,7 @@ export function MonthlyMatrix({ table, latestDate }: Props) {
     )
   }
 
-  const hasPartial = months.some((m) => m.partial)
+  const hasPartial = columns.some((c) => c.partial)
 
   return (
     <div className="flex flex-col gap-2">
@@ -107,44 +118,49 @@ export function MonthlyMatrix({ table, latestDate }: Props) {
           <TableRow>
             <TableHead
               rowSpan={3}
-              className="sticky left-0 z-10 min-w-60 bg-muted px-2 text-left normal-case"
+              className="sticky left-0 z-10 w-52 min-w-52 bg-muted px-2 text-left normal-case"
             >
               Facility / pipeline
             </TableHead>
-            {yearGroups.map((group) => (
+            {groups.map((group) => (
               <TableHead
-                key={group.year}
+                key={group.group}
                 colSpan={group.count * 2}
                 className={cn(HEAD, "border-l")}
               >
-                {group.year}
+                {group.group}
               </TableHead>
             ))}
           </TableRow>
           <TableRow>
-            {months.map((month) => (
+            {columns.map((column) => (
               <TableHead
-                key={month.key}
+                key={column.key}
                 colSpan={2}
-                className={cn(HEAD, "border-l", month.partial && "italic")}
+                className={cn(HEAD, "border-l", column.partial && "italic")}
                 title={
-                  month.partial && latestDate
+                  column.partial && latestDate
                     ? `Partial month: data to ${formatDay(latestDate, true)}`
                     : undefined
                 }
               >
-                {month.label}
-                {month.partial ? "*" : ""}
+                {column.label}
+                {column.partial ? "*" : ""}
               </TableHead>
             ))}
           </TableRow>
           <TableRow>
-            {months.map((month) => (
-              <Fragment key={month.key}>
+            {columns.map((column) => (
+              <Fragment key={column.key}>
                 <TableHead className={cn(HEAD, "border-l font-normal")}>
                   Vol_BCF
                 </TableHead>
-                <TableHead className={cn(HEAD, "font-normal")}>%</TableHead>
+                <TableHead
+                  className={cn(HEAD, "font-normal")}
+                  title={change.title}
+                >
+                  {change.label}
+                </TableHead>
               </Fragment>
             ))}
           </TableRow>
@@ -171,11 +187,11 @@ export function MonthlyMatrix({ table, latestDate }: Props) {
                     </button>
                     {facility.name}
                   </TableCell>
-                  {months.map((month, i) => (
+                  {columns.map((column, i) => (
                     <CellPair
-                      key={month.key}
+                      key={column.key}
                       cell={facility.cells[i]}
-                      partial={month.partial}
+                      partial={column.partial}
                       bold
                     />
                   ))}
@@ -183,14 +199,14 @@ export function MonthlyMatrix({ table, latestDate }: Props) {
                 {!isCollapsed &&
                   facility.pipelines.map((pipeline) => (
                     <TableRow key={pipeline.name}>
-                      <TableCell className="sticky left-0 z-10 bg-background py-1 pr-2 pl-9 font-normal">
+                      <TableCell className="sticky left-0 z-10 max-w-52 bg-background py-1 pr-2 pl-9 font-normal whitespace-normal">
                         {pipeline.name}
                       </TableCell>
-                      {months.map((month, i) => (
+                      {columns.map((column, i) => (
                         <CellPair
-                          key={month.key}
+                          key={column.key}
                           cell={pipeline.cells[i]}
-                          partial={month.partial}
+                          partial={column.partial}
                         />
                       ))}
                     </TableRow>
@@ -202,11 +218,11 @@ export function MonthlyMatrix({ table, latestDate }: Props) {
             <TableCell className="sticky left-0 z-10 bg-muted px-2 py-1">
               Total
             </TableCell>
-            {months.map((month, i) => (
+            {columns.map((column, i) => (
               <CellPair
-                key={month.key}
+                key={column.key}
                 cell={table.total[i]}
-                partial={month.partial}
+                partial={column.partial}
                 bold
               />
             ))}
