@@ -107,17 +107,19 @@ flowchart TB
 
     subgraph FE["Frontend: frontend/src"]
         direction TB
-        RT["routes/_layout/*.tsx<br/>(pages)"] --> SV["services/{feature}/*_api.ts<br/>(typed fetch calls)"]
+        RT["routes/_layout/*.tsx<br/>(thin: URL + title)"] --> PG["features/{feature}/pages<br/>(page components)"]
+        PG --> SV["features/{feature}/api.ts<br/>(typed fetch calls)"]
         SV --> AC["services/api_client.ts<br/>(apiRequest)"]
-        RT --> CMP["components/{Feature}/<br/>(UI pieces)"]
-        RT --> TQ["TanStack Query<br/>(cache per queryKey)"]
+        PG --> CMP["features/{feature}/components<br/>(UI pieces)"]
+        PG --> TQ["TanStack Query<br/>(cache per queryKey)"]
     end
 
     subgraph API["Backend: backend/app"]
         direction TB
-        R["api/routes/*.py<br/>HTTP only"] --> DEP["api/deps.py<br/>auth + service providers"]
-        DEP --> S["services/*_service.py<br/>caching, rules, logging"]
-        S --> REP["repositories/*_repository.py<br/>SQL only"]
+        M["api/main.py<br/>registers feature routers"] --> R["features/{feature}/router.py<br/>HTTP only"]
+        R --> DEP["api/dependencies.py<br/>auth (Reader / Writer)"]
+        R --> S["features/{feature}/service.py<br/>caching, rules, logging"]
+        S --> REP["features/{feature}/repository.py<br/>SQL only"]
         REP --> DBX["core/databricks.py<br/>connection + lock"]
         S --> C["core/cache.py"]
     end
@@ -126,15 +128,19 @@ flowchart TB
     API --> J["Databricks Jobs API<br/>(pipeline button)"]
 ```
 
-Each layer has one job:
+Each page is a feature: a folder under `backend/app/features/` (`news`, `pipeline_nominations`, `pipeline`) and one under `frontend/src/features/`. Each layer has one job:
 
 | Layer | Responsibility |
 |-------|----------------|
-| `api/routes` | Parse request parameters, call a service, return the response. No business logic. |
-| `api/deps.py` | Authentication and authorization (Reader / Writer roles) and service providers for dependency injection. |
-| `services` | Business rules, caching, normalization, logging. |
-| `repositories` | SQL only. Returns raw rows. |
+| `features/{feature}/router.py` | Parse request parameters, call the service, return the response. No business logic. |
+| `features/{feature}/dependencies.py` | Builds the feature's service for dependency injection (one instance per process). |
+| `features/{feature}/service.py` | Business rules, caching, normalization, logging. |
+| `features/{feature}/repository.py` | SQL only. Returns raw rows. |
+| `api/dependencies.py` | Authentication and authorization (Reader / Writer roles), shared by every feature. |
+| `api/main.py` | Registers every feature router under `/api/v1`. |
 | `core` | Configuration, the Databricks connection, caches. |
+
+Calls only go one way: router, service, repository, core. Features do not import from each other. Anything two features need goes in `core` (backend) or in the shared folders `components`, `hooks` and `lib` (frontend).
 
 There is no mock backend. The backend always talks to Databricks, so a valid Databricks configuration is required to run it.
 
@@ -144,10 +150,10 @@ The two sets of routes are connected only by the URL path `/api/...`.
 
 | Kind | Defined in | Example |
 |------|------------|---------|
-| Page route | `frontend/src/routes/_layout/*.tsx` (TanStack Router) | `/newsletter` |
-| API route | `backend/app/api/routes/*.py` (FastAPI) | `GET /api/v1/news/` |
+| Page route | `frontend/src/routes/_layout/*.tsx` (TanStack Router): URL and title only, the page lives in `frontend/src/features/*/pages/` | `/newsletter` |
+| API route | `backend/app/features/*/router.py` (FastAPI) | `GET /api/v1/news/` |
 
-The backend URL is assembled from three prefixes: `/api/v1` (`API_V1_STR` in `core/config.py`, used in `main.py`), `/news` (set in `api/main.py`), and the route decorator in the route file. The frontend repeats the full path by hand in `services/news/news_api.ts`, so a prefix change on the backend must be changed there too.
+The backend URL is assembled from three prefixes: `/api/v1` (`API_V1_STR` in `core/config.py`, used in `main.py`), `/news` (set in `api/main.py`), and the route decorator in the feature's router. The frontend repeats the full path by hand in `features/news/api.ts`, so a prefix change on the backend must be changed there too.
 
 Requests are forwarded to the backend as follows:
 
@@ -156,7 +162,7 @@ Requests are forwarded to the backend as follows:
 | Radix (dev / prod) | nginx in the frontend container (`frontend/nginx-backend-not-found.conf`, `proxy_pass http://backend:8000`) |
 | `bun run dev` | Vite dev proxy (`frontend/vite.config.ts`, target `http://localhost:8000`) |
 
-The browser only talks to one origin, so no CORS is involved. nginx also forwards the `X-Auth-Request-*` and `Authorization` headers that the Radix OAuth2 proxy adds. `get_current_user` in `api/deps.py` reads them. When no proxy is in front of the backend (local development), it falls back to a dev user (`analyst@example.com`) with full access, so `/api/v1/utils/me` returns that user locally.
+The browser only talks to one origin, so no CORS is involved. nginx also forwards the `X-Auth-Request-*` and `Authorization` headers that the Radix OAuth2 proxy adds. `get_current_user` in `api/dependencies.py` reads them. When no proxy is in front of the backend (local development), it falls back to a dev user (`analyst@example.com`) with full access, so `/api/v1/utils/me` returns that user locally.
 
 ### Data flow: reading
 
@@ -164,7 +170,7 @@ The browser only talks to one origin, so no CORS is involved. nginx also forward
 sequenceDiagram
     participant Pg as newsletter.tsx
     participant Q as TanStack Query
-    participant R as routes/news.py
+    participant R as features/news/router.py
     participant S as NewsService
     participant D as Databricks
 
@@ -198,22 +204,24 @@ Write failures are only logged. They are not shown in the UI.
 
 - `GET /news/facets`: distinct categories and regions for the filter dropdowns.
 - `GET /pipeline-nominations/filters` and `GET /pipeline-nominations/overview`: data for the Pipeline Nominations page (see below).
-- `POST /news/email-summary`: builds an email from the favourited articles (`services/email_service.py`) and sends it in the background. Needs the Writer role and the Atlas email settings.
-- `GET /news/pipeline/last-run` and `POST /news/pipeline/trigger`: read the status of, and start, the Databricks ingestion job through the Jobs REST API (`services/databricks_jobs.py`). Trigger returns 503 when Databricks is not configured.
+- `POST /news/email-summary`: builds an email from the favourited articles (`features/news/email_summary.py`) and sends it in the background. Needs the Writer role and the Atlas email settings.
+- `GET /news/pipeline/last-run` and `POST /news/pipeline/trigger`: read the status of, and start, the Databricks ingestion job through the Jobs REST API (`features/pipeline/jobs.py`). Trigger returns 503 when Databricks is not configured.
 
 ## Pipeline Nominations page
 
-The page at `/pipeline_nominations` reproduces the "Platts US Daily Pipeline Nominations (Monthly)" report. It follows the vertical-slice layout described under "Adding a New Page".
+The page at `/pipeline_nominations` reproduces the "Platts US Daily Pipeline Nominations (Monthly)" report. It is a feature folder on each side, as described under "Adding a New Page".
 
 | Part | File |
 |------|------|
-| Route (HTTP only) | `backend/app/api/routes/pipeline_nominations.py` |
-| Service (cache, daily series, monthly matrix, month-on-month %) | `backend/app/services/pipeline_nominations_service.py` |
-| Repository (one SQL query) | `backend/app/repositories/pipeline_nominations_repository.py` |
-| Response models | `backend/app/schemas/pipeline_nominations.py` |
-| API calls and types | `frontend/src/services/pipeline_nominations/pipeline_nominations_api.ts` |
-| Page | `frontend/src/routes/_layout/pipeline_nominations.tsx` |
-| Components | `frontend/src/components/PipelineNominations/` (`PipelineFilter`, `FlowChart`, `MonthlyMatrix`) |
+| Route (HTTP only) | `backend/app/features/pipeline_nominations/router.py` |
+| Service (cache, daily series, monthly matrix, month-on-month %) | `backend/app/features/pipeline_nominations/service.py` |
+| Repository (one SQL query) | `backend/app/features/pipeline_nominations/repository.py` |
+| Response models | `backend/app/features/pipeline_nominations/schemas.py` |
+| Service provider | `backend/app/features/pipeline_nominations/dependencies.py` |
+| API calls and types | `frontend/src/features/pipeline_nominations/api.ts` |
+| Page | `frontend/src/features/pipeline_nominations/pages/PipelineNominationsPage.tsx` |
+| Route (URL and title) | `frontend/src/routes/_layout/pipeline_nominations.tsx` |
+| Components | `frontend/src/features/pipeline_nominations/components/` (`PipelineFilter`, `FlowChart`, `MonthlyMatrix`) |
 
 **Data.** The source is the table in `PIPELINE_NOMINATIONS_TABLE` (`ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data`). The service account used by the backend needs `SELECT` on it. The repository runs one query that sums `Vol_BCF` per facility (`name`), pipeline (`pipelineName`, trimmed) and day over the last 13 months. The service caches that result for 15 minutes and derives everything else from it in memory.
 
@@ -242,7 +250,7 @@ flowchart LR
     B --> C["At sign-in, Azure AD puts<br/>roles: [Reader] / [Writer] in the token"]
     C --> D["Radix OAuth2 proxy<br/>setAuthorizationHeader: true"]
     D --> E["nginx forwards Authorization<br/>and X-Auth-Request-* to the backend"]
-    E --> F["api/deps.py<br/>get_current_user + _decode_roles"]
+    E --> F["api/dependencies.py<br/>get_current_user + _decode_roles"]
     F --> G["require_reader / require_writer<br/>on each endpoint"]
 ```
 
@@ -257,7 +265,7 @@ Configured in the Azure portal, Enterprise application `lng-trading-app`, Users 
 
 ### How access is decided
 
-Every request is checked in `get_current_user` in `backend/app/api/deps.py`. The backend is stateless and works out the user from the headers on each request.
+Every request is checked in `get_current_user` in `backend/app/api/dependencies.py`. The backend is stateless and works out the user from the headers on each request.
 
 | Rule | Source |
 |------|--------|
@@ -301,7 +309,7 @@ Open `/api/v1/utils/me` on the deployed app. It returns your email, `roles`, `ca
 
 1. In the Azure portal, open the App registration for this app (the client ID is the `clientId` under `oauth2` in `radixconfig.yaml`), then App roles, Create app role. Set the display name, the **value** (this is what appears in the token), and allowed member types "Users/Groups".
 2. Assign the new role to a group in the Enterprise application as described above.
-3. Update the backend: add the role value in `api/deps.py` (next to `WRITER_ROLE` and `READER_ROLE`), include it in `get_current_user` or `_is_writer`, and add a `require_<role>` dependency for endpoints that need it.
+3. Update the backend: add the role value in `api/dependencies.py` (next to `WRITER_ROLE` and `READER_ROLE`), include it in `get_current_user` or `_is_writer`, and add a `require_<role>` dependency for endpoints that need it.
 
 **Other settings**
 
@@ -320,35 +328,40 @@ Open `/api/v1/utils/me` on the deployed app. It returns your email, `roles`, `ca
 
 ## Adding a New Page
 
-Each page is its own vertical slice: a route, a service and a repository on the backend, and a page, an API module and components on the frontend. Slices share only auth, the Databricks connection and the cache.
+Each page is its own feature: a folder under `backend/app/features/<name>/` and one under `frontend/src/features/<name>/`. Features share only auth, the Databricks connection, the cache and the shared UI folders, and they do not import from each other. `pipeline_nominations` is a complete, small example to copy from.
 
 The example below is a supply and demand charts page.
 
 ### Where each file goes
 
 ```
-backend/app/
-  repositories/supply_demand_repository.py   SQL only
-  services/supply_demand_service.py          caching and shaping the data
-  schemas/supply_demand.py                   response models
-  api/routes/supply_demand.py                HTTP endpoints
-  api/deps.py                                add a service provider
-  api/main.py                                register the router
+backend/app/features/supply_demand/
+  __init__.py
+  router.py              HTTP endpoints
+  service.py             caching and shaping the data
+  repository.py          SQL only
+  schemas.py             response models
+  dependencies.py        builds the service
+backend/app/api/main.py  register the router
 
-frontend/src/
-  services/supply_demand/api.ts              typed calls to the backend
-  routes/_layout/supply_demand.tsx           the page
-  components/SupplyDemand/*.tsx              chart and filter components
-  components/Sidebar/AppSidebar.tsx          add a menu entry
+frontend/src/features/supply_demand/
+  api.ts                 typed calls to the backend
+  utils.ts               formatting and data-shaping helpers
+  components/            chart and filter components
+  pages/SupplyDemandPage.tsx    the page
+frontend/src/routes/_layout/supply_demand.tsx   route: URL and title only
+frontend/src/components/Sidebar/AppSidebar.tsx  add a menu entry
 ```
+
+Keep a feature flat until it grows: add `hooks/` or more subfolders only when a folder holds several files.
 
 ### Data flow for the new page
 
 ```mermaid
 sequenceDiagram
-    participant Pg as supply_demand.tsx
-    participant A as services/supply_demand/api.ts
-    participant R as routes/supply_demand.py
+    participant Pg as SupplyDemandPage.tsx
+    participant A as features/supply_demand/api.ts
+    participant R as features/supply_demand/router.py
     participant S as SupplyDemandService
     participant C as keyed cache
     participant P as SupplyDemandRepository
@@ -372,7 +385,7 @@ sequenceDiagram
 
 ### Backend steps
 
-1. **Repository** (`repositories/supply_demand_repository.py`): SQL only, using `?` placeholders.
+1. **Repository** (`features/supply_demand/repository.py`): SQL only, using `?` placeholders.
    ```python
    class SupplyDemandRepository:
        def series(self, region: str | None, date_from: str, date_to: str) -> list[dict]:
@@ -386,7 +399,7 @@ sequenceDiagram
    ```
    Add `SUPPLY_DEMAND_TABLE` to `core/config.py`, and to the variables in `radixconfig.yaml`.
 2. **Service**: holds the repository, caches results and returns chart-ready series. `TTLCache` in `core/cache.py` holds a single value, so parametrised data needs a keyed cache. Add a `KeyedTTLCache` next to it.
-3. **Provider** in `api/deps.py`, the same pattern as news:
+3. **Provider** (`features/supply_demand/dependencies.py`), the same pattern as news:
    ```python
    @lru_cache
    def get_supply_demand_service() -> SupplyDemandService:
@@ -394,7 +407,7 @@ sequenceDiagram
 
    SupplyDemandServiceDep = Annotated[SupplyDemandService, Depends(get_supply_demand_service)]
    ```
-4. **Route** (`api/routes/supply_demand.py`), with the Reader role applied to the whole router:
+4. **Router** (`features/supply_demand/router.py`), with the Reader role applied to the whole router:
    ```python
    router = APIRouter(dependencies=[Depends(require_reader)])
 
@@ -402,16 +415,18 @@ sequenceDiagram
    def series(service: SupplyDemandServiceDep, date_from: str, date_to: str, region: str | None = None):
        return service.series(region, date_from, date_to)
    ```
-   For write endpoints, add a `WriterUser` parameter.
+   For write endpoints, add a `WriterUser` parameter (from `api/dependencies.py`).
 5. **Register it** in `api/main.py`:
    ```python
-   api_router.include_router(supply_demand.router, prefix="/supply-demand", tags=["supply-demand"])
+   from app.features.supply_demand.router import router as supply_demand_router
+
+   api_router.include_router(supply_demand_router, prefix="/supply-demand", tags=["supply-demand"])
    ```
    The tag is required, because `custom_generate_unique_id` in `main.py` reads `route.tags[0]`.
 
 ### Frontend steps
 
-1. **API module** (`services/supply_demand/api.ts`):
+1. **API module** (`features/supply_demand/api.ts`):
    ```ts
    export const getSeries = (p: { region?: string; dateFrom: string; dateTo: string }) =>
      apiRequest<SeriesResponse>("/api/v1/supply-demand/series", {
@@ -419,11 +434,9 @@ sequenceDiagram
      })
    ```
    All `query` values must be strings.
-2. **Page** (`routes/_layout/supply_demand.tsx`): the file path decides the URL, so this page is `/supply_demand`.
+2. **Page** (`features/supply_demand/pages/SupplyDemandPage.tsx`): a plain component that fetches with `useQuery` and renders the feature's components.
    ```tsx
-   export const Route = createFileRoute("/_layout/supply_demand")({ component: SupplyDemand })
-
-   function SupplyDemand() {
+   export function SupplyDemandPage() {
      const q = useQuery({
        queryKey: ["supply_demand", "series", params],
        queryFn: () => getSeries(params),
@@ -432,9 +445,16 @@ sequenceDiagram
      // render the filters and <SupplyDemandChart data={q.data} />
    }
    ```
-3. **Sidebar entry**: add an item to `baseItems` in `components/Sidebar/AppSidebar.tsx`, for example `{ icon: LineChart, title: "Supply & Demand", path: "/supply_demand" }`.
-4. **Chart library**: none is installed yet. Add one in `frontend/`, for example `bun add recharts`.
-5. **Route tree**: `frontend/src/routeTree.gen.ts` is regenerated by the Vite router plugin when you run `bun run dev` or `bun run build`. Do not edit it by hand.
+3. **Route** (`routes/_layout/supply_demand.tsx`): the file path decides the URL, so this page is `/supply_demand`. Keep the file thin.
+   ```tsx
+   export const Route = createFileRoute("/_layout/supply_demand")({
+     component: SupplyDemandPage,
+     head: () => ({ meta: [{ title: "Supply & Demand - LNG Trading App" }] }),
+   })
+   ```
+4. **Sidebar entry**: add an item to `baseItems` in `components/Sidebar/AppSidebar.tsx`, for example `{ icon: LineChart, title: "Supply & Demand", path: "/supply_demand" }`.
+5. **Charts**: `recharts` is already a dependency. See `features/pipeline_nominations/components/FlowChart.tsx` for a line chart that follows the app theme.
+6. **Route tree**: `frontend/src/routeTree.gen.ts` is regenerated by the Vite router plugin when you run the dev server or a build. Do not edit it by hand. If the dev server is running when you create a route file, check that it did not append placeholder code to it.
 
 ### What you do not need to change
 
@@ -457,39 +477,45 @@ lng-trading-app/
 │   ├── app/
 │   │   ├── main.py             # Entry point, middleware, router registration
 │   │   ├── api/
-│   │   │   ├── deps.py          # Auth (roles) and service providers (dependency injection)
-│   │   │   └── routes/          # Thin HTTP endpoints: news, pipeline, pipeline_nominations, utils
-│   │   ├── services/           # Business logic
-│   │   │   ├── news_service.py           # Dataset cache, optimistic updates, background writes
-│   │   │   ├── news_query.py             # Filtering, sorting, pagination
-│   │   │   ├── email_service.py          # Summary email builder
-│   │   │   ├── pipeline_nominations_service.py  # Pipeline nominations: cached snapshot, daily series, monthly matrix
-│   │   │   ├── databricks_jobs.py        # Pipeline trigger / status (Jobs REST API)
-│   │   │   └── normalization.py          # Shared data normalization utilities
-│   │   ├── repositories/
-│   │   │   ├── news_repository.py        # SQL access to the news table
-│   │   │   └── pipeline_nominations_repository.py  # SQL access to the Platts flow table
-│   │   ├── core/
-│   │   │   ├── config.py        # All configuration (loaded from .env)
-│   │   │   ├── cache.py         # TTLCache and PendingOverrides
-│   │   │   ├── databricks.py    # Databricks connection manager
-│   │   │   └── security.py     # JWT / password hashing
-│   │   └── schemas/            # Pydantic request/response models
+│   │   │   ├── main.py          # Registers every feature router under /api/v1
+│   │   │   ├── dependencies.py  # Authentication and authorization (Reader / Writer roles)
+│   │   │   └── routes/utils.py  # Health check and current user
+│   │   ├── features/           # One folder per feature (page)
+│   │   │   ├── news/
+│   │   │   │   ├── router.py             # HTTP endpoints
+│   │   │   │   ├── service.py            # Dataset cache, optimistic updates, background writes
+│   │   │   │   ├── repository.py         # SQL access to the news table
+│   │   │   │   ├── schemas.py            # Request / response models
+│   │   │   │   ├── dependencies.py       # Builds the service
+│   │   │   │   ├── query.py              # Filtering, sorting, pagination
+│   │   │   │   ├── normalization.py      # Tag and region normalization
+│   │   │   │   └── email_summary.py      # Summary email builder
+│   │   │   ├── pipeline_nominations/     # router, service, repository, schemas, dependencies
+│   │   │   └── pipeline/                 # router.py + jobs.py (Databricks job trigger / status)
+│   │   └── core/
+│   │       ├── config.py        # All configuration (loaded from .env)
+│   │       ├── cache.py         # TTLCache and PendingOverrides
+│   │       ├── databricks.py    # Databricks connection manager
+│   │       └── security.py     # JWT / password hashing
 │   ├── tests/                  # Pytest test suite
 │   └── Dockerfile
 ├── frontend/                   # React + TypeScript application
 │   ├── src/
 │   │   ├── main.tsx            # App entry point
-│   │   ├── routes/             # TanStack Router file-based routes
-│   │   │   └── _layout/
-│   │   │       ├── newsletter.tsx      # Main news feed with analyst controls
-│   │   │       ├── news_summary.tsx    # Favourited news summary dashboard
-│   │   │       └── pipeline_nominations.tsx  # Platts US daily pipeline nominations (monthly)
-│   │   ├── components/         # UI components (shadcn/ui based)
-│   │   ├── services/           # API client and news service modules
-│   │   │   └── news/
-│   │   │       ├── news_api.ts   # API functions (getNews, patch*)
-│   │   │       └── news_utils.ts # Shared helpers (formatTime, cleanTagValue, etc.)
+│   │   ├── routes/             # TanStack Router file-based routes: thin files with URL and title only
+│   │   │   └── _layout/        # newsletter, news_summary, news_summary_condensed, pipeline_nominations
+│   │   ├── features/           # One folder per feature (page)
+│   │   │   ├── news/
+│   │   │   │   ├── pages/       # NewsletterPage, NewsSummaryPage, NewsSummaryCondensedPage
+│   │   │   │   ├── components/  # Article panels, layouts, pipeline and email buttons
+│   │   │   │   ├── hooks/       # useNewsLayout, useHiddenArticles
+│   │   │   │   ├── api.ts       # API functions (getNews, patch*)
+│   │   │   │   ├── utils.ts     # Helpers (formatTime, cleanTagValue, etc.)
+│   │   │   │   └── layout.ts    # Layout and grouping logic
+│   │   │   └── pipeline_nominations/   # pages, components (PipelineFilter, FlowChart, MonthlyMatrix), api.ts, utils.ts
+│   │   ├── components/         # Shared UI: ui/ (shadcn), Common/, Sidebar/
+│   │   ├── hooks/              # Shared hooks (useAuth, useDateFilter, useEquinorFont, ...)
+│   │   ├── services/api_client.ts   # fetch wrapper used by every feature's api.ts
 │   │   └── lib/utils.ts        # Tailwind merge + formatHtmlText
 │   ├── nginx.conf              # Production nginx config
 │   └── Dockerfile

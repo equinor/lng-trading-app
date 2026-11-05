@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test"
 
-import type { DbNewsRow } from "../src/services/news/news_api"
-import type { DefaultLayoutMode, SentimentKey, StoredLayout } from "../src/services/news/news_layout"
+import type { DbNewsRow } from "../src/features/news/api"
+import type { DefaultLayoutMode, SentimentKey, StoredLayout } from "../src/features/news/layout"
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
