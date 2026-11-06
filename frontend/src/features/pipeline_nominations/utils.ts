@@ -1,4 +1,34 @@
-import type { DailySeries } from "./api"
+import type { CycleSeries, DailySeries } from "./api"
+
+/** A line per facility; `x` is a day (YYYY-MM-DD) or a day and cycle ("YYYY-MM-DD|2"). */
+export type ChartSeries = {
+  name: string
+  points: { x: string; bcf: number }[]
+}
+
+export const fromDaily = (series: DailySeries[]): ChartSeries[] =>
+  series.map((s) => ({
+    name: s.name,
+    points: s.points.map((p) => ({ x: p.flow_date, bcf: p.bcf })),
+  }))
+
+// Nomination cycles in the order they happen within a gas day.
+const CYCLES = [
+  { code: "TI", label: "Timely" },
+  { code: "EV", label: "Evening" },
+  { code: "I1", label: "ID1" },
+  { code: "I2", label: "ID2" },
+  { code: "I3", label: "ID3" },
+]
+
+export const fromCycles = (series: CycleSeries[]): ChartSeries[] =>
+  series.map((s) => ({
+    name: s.name,
+    points: s.points.map((p) => ({
+      x: `${p.gas_day}|${CYCLES.findIndex((c) => c.code === p.cycle) + 1}`,
+      bcf: p.bcf,
+    })),
+  }))
 
 // Stable per-facility colours: the index comes from the full facility list, not the filtered one.
 const PALETTE = [
@@ -42,19 +72,25 @@ export function formatDay(iso: string, withYear = false) {
   })
 }
 
-/** One row per day with a column per facility, the shape Recharts expects. */
+/** Axis text for a cycle point, for example "4 Nov ID1". */
+export function formatCycleX(x: string) {
+  const [day, order] = x.split("|")
+  return `${formatDay(day)} ${CYCLES[Number(order) - 1]?.label ?? ""}`
+}
+
+/** One row per x value with a column per facility, the shape Recharts expects. */
 export function pivotSeries(
-  series: DailySeries[],
+  series: ChartSeries[],
 ): Record<string, number | string>[] {
-  const byDay = new Map<string, Record<string, number | string>>()
+  const byX = new Map<string, Record<string, number | string>>()
   for (const { name, points } of series) {
-    for (const { flow_date, bcf } of points) {
-      const row = byDay.get(flow_date) ?? { flow_date }
+    for (const { x, bcf } of points) {
+      const row = byX.get(x) ?? { x }
       row[name] = bcf
-      byDay.set(flow_date, row)
+      byX.set(x, row)
     }
   }
-  return [...byDay.values()].sort((a, b) =>
-    String(a.flow_date).localeCompare(String(b.flow_date)),
+  return [...byX.values()].sort((a, b) =>
+    String(a.x).localeCompare(String(b.x)),
   )
 }

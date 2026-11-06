@@ -9,17 +9,21 @@ import {
   YAxis,
 } from "recharts"
 
-import type { DailySeries } from "@/features/pipeline_nominations/api"
 import {
+  type ChartSeries,
   formatDay,
   pivotSeries,
 } from "@/features/pipeline_nominations/utils"
 
 type Props = {
   title: string
-  series: DailySeries[]
+  series: ChartSeries[]
   colorOf: (name: string) => string
   showLegend?: boolean
+  /** Draw steps instead of slopes, for values that hold until the next update. */
+  step?: boolean
+  formatTick?: (x: string) => string
+  formatLabel?: (x: string) => string
 }
 
 export function FlowChart({
@@ -27,6 +31,9 @@ export function FlowChart({
   series,
   colorOf,
   showLegend = false,
+  step = false,
+  formatTick = (x) => formatDay(x),
+  formatLabel = (x) => formatDay(x, true),
 }: Props) {
   const data = pivotSeries(series)
 
@@ -50,8 +57,8 @@ export function FlowChart({
                 vertical={false}
               />
               <XAxis
-                dataKey="flow_date"
-                tickFormatter={(value: string) => formatDay(value)}
+                dataKey="x"
+                tickFormatter={formatTick}
                 tick={{ fill: "currentColor", fontSize: 11 }}
                 minTickGap={28}
               />
@@ -68,7 +75,7 @@ export function FlowChart({
                 width={56}
               />
               <Tooltip
-                labelFormatter={(value) => formatDay(String(value), true)}
+                labelFormatter={(value) => formatLabel(String(value))}
                 formatter={(value) =>
                   typeof value === "number" ? value.toFixed(2) : value
                 }
@@ -91,7 +98,7 @@ export function FlowChart({
               {series.map((s) => (
                 <Line
                   key={s.name}
-                  type="monotone"
+                  type={step ? "stepAfter" : "monotone"}
                   dataKey={s.name}
                   stroke={colorOf(s.name)}
                   strokeWidth={2}

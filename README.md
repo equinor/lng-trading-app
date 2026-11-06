@@ -215,7 +215,7 @@ The page at `/pipeline_nominations` reproduces the "Platts US Daily Pipeline Nom
 |------|------|
 | Route (HTTP only) | `backend/app/features/pipeline_nominations/router.py` |
 | Service (cache, daily series, monthly and daily tables, % change) | `backend/app/features/pipeline_nominations/service.py` |
-| Repository (one SQL query per source) | `backend/app/features/pipeline_nominations/repository.py` |
+| Repository (one SQL query per source, plus one for the WoodMac cycle view) | `backend/app/features/pipeline_nominations/repository.py` |
 | Response models | `backend/app/features/pipeline_nominations/schemas.py` |
 | Service provider | `backend/app/features/pipeline_nominations/dependencies.py` |
 | API calls and types | `frontend/src/features/pipeline_nominations/api.ts` |
@@ -223,27 +223,29 @@ The page at `/pipeline_nominations` reproduces the "Platts US Daily Pipeline Nom
 | Route (URL and title) | `frontend/src/routes/_layout/pipeline_nominations.tsx` |
 | Components | `frontend/src/features/pipeline_nominations/components/` (`PipelineFilter`, `FlowChart`, `NominationsMatrix`) |
 
-**Data.** Two tables, one per `source`. The service account used by the backend needs `SELECT` on both.
+**Data.** Two tables, one per `source`, plus a bronze table for the WoodMac cycle view. The service account used by the backend needs `SELECT` on all three.
 
 | Source | Setting | Default table | Volume column |
 |--------|---------|---------------|---------------|
 | `platts` | `PIPELINE_NOMINATIONS_PLATTS_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data` | `Vol_BCF`, per `name` (facility), `pipelineName`, `flowDate` |
 | `woodmac` | `PIPELINE_NOMINATIONS_WOODMAC_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles` | `Nominated_VolBCF`, per `LNG_Plant_Name` (facility), `pipelineName`, `gasDay` |
+| `woodmac` (cycle view) | `PIPELINE_NOMINATIONS_WOODMAC_CYCLES_TABLE` | `ms_vulcan_gplng_plab.fundamentals_bronze.wm_genscape_pipeline_all_cycles` | `netScheduledCapacity` / 1,039,000, per cycle |
 
-Each repository query returns the same row shape (facility, pipeline, day, BCF) over the last 13 months, so the service and the page treat both sources alike. For WoodMac the query keeps only the latest row (by `insertTimestamp`) for each pipeline, location and day, so nomination cycles are never added together. The service caches each source for 15 minutes and derives everything else from it in memory.
+Each repository query returns the same row shape (facility, pipeline, day, BCF) over the last 13 months, so the service and the page treat both sources alike. For WoodMac the query keeps only the latest row (by `insertTimestamp`) for each pipeline, location and day, so nomination cycles are never added together. The service caches each source for 15 minutes and derives everything else from it in memory. The WoodMac cycle view reads its own query on the bronze table (the last 14 gas days), cached for one hour.
 
 **Endpoints** (Reader role):
 
 | Endpoint | Returns |
 |----------|---------|
 | `GET /api/v1/pipeline-nominations/filters?source=platts\|woodmac` | Facilities with their pipelines, and the latest data date, for one source (default `woodmac`) |
-| `GET /api/v1/pipeline-nominations/overview?source=platts\|woodmac&selected=Facility::Pipeline\|Facility::Pipeline` | The 14-day and 180-day daily series per facility, plus two tables with the same shape: `monthly_table` (one column per month) and `daily_table` (one column per day for the last 14 days). An empty `selected` means everything. `source` defaults to `woodmac`. |
+| `GET /api/v1/pipeline-nominations/overview?source=platts\|woodmac&selected=Facility::Pipeline\|Facility::Pipeline` | The 14-day and 180-day daily series per facility, plus two tables with the same shape: `monthly_table` (one column per month) and `daily_table` (one column per day for the last 14 days). For `source=woodmac` it also returns `cycle_series` (the final nomination of each cycle for the last 7 gas days, per facility) and `cycle_table` (the last 3 gas days, one column per cycle); both are empty for Platts. An empty `selected` means everything. `source` defaults to `woodmac`. |
 
 **Behaviour to know about**
 
 - The 14 and 180 day windows end at the latest date in the data, not at today's date, so the charts are never empty when the feed is a few days behind.
 - Month columns come from the whole dataset, so they stay the same while filtering.
-- The table has a toggle between **Month on month** and **Day on day**. Both tables arrive in the same response, so switching is instant. The number of day columns is `_DAILY_TABLE_DAYS` in the service.
+- The table has a toggle between **Month on month** and **Day on day**, and for WoodMac also **By cycle**. All tables arrive in the same response, so switching is instant. The number of day columns is `_DAILY_TABLE_DAYS` in the service.
+- **Cycle view (WoodMac only).** Shows the final nomination of each of the five daily cycles: Timely (`TI`), Evening (`EV`), Intraday 1 to 3 (`I1`, `I2`, `I3`). The silver table keeps only the latest cycle per day, so this view reads the bronze table, keeps rows with `cycleStatus = 'Final'`, `locationRole = 'DELIVERY'` and `facilityType = 'LNG TERMINAL'`, and takes the newest row (by `insertTimestamp`) per gas day, location and cycle. Locations are then summed per facility and pipeline. The table covers the last `_CYCLE_TABLE_DAYS` (3) gas days and the chart the last `_CYCLE_CHART_DAYS` (7). The % is the change on the previous cycle of the same day, and the first cycle of a day has none. A cycle that has not happened yet is blank. If a location did not publish a cycle that has happened for other locations (the late intraday cycles are often missing), the previous cycle's value is carried forward and shown in italics. The backend caches this query for an hour (`_CYCLE_TTL`) and the page refetches every hour while the WoodMac source is open.
 - The % columns are changes against the previous column: the previous month, or the previous day. They are blank when the previous value is missing or zero. In the day view the first column's % still uses the day before the window.
 - The latest month is marked with `*` and shown in italics when the data stops before month end, because its % change compares a partial month with a full one.
 - The filter works like a Power BI slicer: ticking a facility selects all of its pipelines, expanding it lets you pick individual pipelines, and nothing ticked means everything.
@@ -557,6 +559,7 @@ lng-trading-app/
 | `NEWS_TABLE` | `ms_vulcan_gplng_plab.trader_news_app.platts_lng_top_news` | Unity Catalog table name |
 | `PIPELINE_NOMINATIONS_PLATTS_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data` | Platts facility-level daily flow table |
 | `PIPELINE_NOMINATIONS_WOODMAC_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles` | WoodMac Genscape pipeline nominations table |
+| `PIPELINE_NOMINATIONS_WOODMAC_CYCLES_TABLE` | `ms_vulcan_gplng_plab.fundamentals_bronze.wm_genscape_pipeline_all_cycles` | WoodMac table that keeps every nomination cycle (by-cycle view) |
 | `SECRET_KEY` | random | JWT signing key |
 | `BACKEND_CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
 | `FIRST_SUPERUSER` | `admin@example.com` | Default admin user email |

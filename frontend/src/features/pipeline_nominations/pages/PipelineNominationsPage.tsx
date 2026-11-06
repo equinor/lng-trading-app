@@ -16,14 +16,23 @@ import {
   getOverview,
   type Source,
 } from "@/features/pipeline_nominations/api"
-import { buildColorMap, formatDay } from "@/features/pipeline_nominations/utils"
+import {
+  buildColorMap,
+  formatCycleX,
+  formatDay,
+  fromCycles,
+  fromDaily,
+} from "@/features/pipeline_nominations/utils"
 
 const QUERY_ROOT = "pipeline_nominations"
 const FIVE_MINUTES = 5 * 60_000
+const ONE_HOUR = 60 * 60_000
 
 const PERIOD_SUBTITLE: Record<MatrixPeriod, string> = {
   month: "Monthly totals and change on the previous month.",
   day: "Daily volumes for the last 14 days and change on the previous day.",
+  cycle:
+    "Final nomination of each cycle (Timely, Evening, ID1 to ID3) for the last 3 gas days. The % is the change on the previous cycle of the same day. Refreshed every hour.",
 }
 
 const SOURCES: Record<
@@ -34,7 +43,7 @@ const SOURCES: Record<
     label: "WoodMac Genscape",
     title: "WoodMac Genscape US Daily Pipeline Nominations (Monthly)",
     description:
-      "WoodMac Genscape nominations to LNG plants, from the latest cycle of each day.",
+      "WoodMac Genscape nominations to LNG plants. The monthly and daily views use the latest cycle of each day.",
   },
   platts: {
     label: "Platts",
@@ -56,6 +65,8 @@ export function PipelineNominationsPage() {
   const changeSource = (next: Source) => {
     setSource(next)
     setSelected(new Set())
+    // The cycle view only exists for WoodMac.
+    if (next === "platts") setPeriod((p) => (p === "cycle" ? "day" : p))
   }
 
   const filtersQuery = useQuery({
@@ -71,6 +82,8 @@ export function PipelineNominationsPage() {
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[2] === source ? previous : undefined,
     staleTime: FIVE_MINUTES,
+    // WoodMac cycle data is refreshed hourly, so keep an open page up to date.
+    refetchInterval: source === "woodmac" ? ONE_HOUR : false,
   })
 
   const facilities = useMemo(
@@ -86,6 +99,12 @@ export function PipelineNominationsPage() {
   const overview = overviewQuery.data
   const latestDate =
     overview?.latest_date ?? filtersQuery.data?.latest_date ?? null
+  const hasCycles = source === "woodmac"
+  const tables = overview && {
+    month: overview.monthly_table,
+    day: overview.daily_table,
+    cycle: overview.cycle_table,
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -147,15 +166,27 @@ export function PipelineNominationsPage() {
             <div className="grid gap-4 xl:grid-cols-2">
               <FlowChart
                 title="Flow BCF (14 Days)"
-                series={overview.daily_14}
+                series={fromDaily(overview.daily_14)}
                 colorOf={colorOf}
               />
               <FlowChart
                 title="Flow BCF (180 Days)"
-                series={overview.daily_180}
+                series={fromDaily(overview.daily_180)}
                 colorOf={colorOf}
                 showLegend
               />
+              {hasCycles && (
+                <div className="xl:col-span-2">
+                  <FlowChart
+                    title="Final nomination by cycle (last 7 gas days)"
+                    series={fromCycles(overview.cycle_series)}
+                    colorOf={colorOf}
+                    step
+                    formatTick={formatCycleX}
+                    formatLabel={formatCycleX}
+                  />
+                </div>
+              )}
             </div>
           ) : (
             !overviewQuery.isError && (
@@ -190,13 +221,14 @@ export function PipelineNominationsPage() {
               <TabsList aria-label="Table period">
                 <TabsTrigger value="month">Month on month</TabsTrigger>
                 <TabsTrigger value="day">Day on day</TabsTrigger>
+                {hasCycles && (
+                  <TabsTrigger value="cycle">By cycle</TabsTrigger>
+                )}
               </TabsList>
             </Tabs>
           </div>
           <NominationsMatrix
-            table={
-              period === "month" ? overview.monthly_table : overview.daily_table
-            }
+            table={tables?.[period] ?? overview.monthly_table}
             period={period}
             latestDate={latestDate}
           />

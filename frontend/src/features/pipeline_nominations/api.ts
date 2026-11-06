@@ -11,13 +11,21 @@ export type FiltersResponse = {
 export type DailyPoint = { flow_date: string; bcf: number }
 export type DailySeries = { name: string; points: DailyPoint[] }
 
+export type CyclePoint = { gas_day: string; cycle: string; bcf: number }
+export type CycleSeries = { name: string; points: CyclePoint[] }
+
 export type ColumnMeta = {
   key: string
   group: string
   label: string
   partial: boolean
 }
-export type MatrixCell = { bcf: number | null; change_pct: number | null }
+export type MatrixCell = {
+  bcf: number | null
+  change_pct: number | null
+  // Cycle view: not published in this cycle, so the previous cycle's value is shown.
+  carried: boolean
+}
 export type PipelineRow = { name: string; cells: MatrixCell[] }
 export type FacilityRow = {
   name: string
@@ -36,6 +44,9 @@ export type OverviewResponse = {
   daily_180: DailySeries[]
   monthly_table: MatrixTable
   daily_table: MatrixTable
+  // Empty for the platts source.
+  cycle_series: CycleSeries[]
+  cycle_table: MatrixTable
 }
 
 export type Source = "platts" | "woodmac"

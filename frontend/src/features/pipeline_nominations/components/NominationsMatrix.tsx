@@ -21,7 +21,7 @@ import {
 } from "@/features/pipeline_nominations/utils"
 import { cn } from "@/lib/utils"
 
-export type MatrixPeriod = "month" | "day"
+export type MatrixPeriod = "month" | "day" | "cycle"
 
 type Props = {
   table: MatrixTable
@@ -33,6 +33,10 @@ type Props = {
 const CHANGE_HEADER: Record<MatrixPeriod, { label: string; title: string }> = {
   month: { label: "%", title: "Change against the previous month" },
   day: { label: "%", title: "Change against the previous day" },
+  cycle: {
+    label: "%",
+    title: "Change against the previous cycle of the same day",
+  },
 }
 
 const PCT_COLOR = {
@@ -53,14 +57,20 @@ function CellPair({
   partial: boolean
   bold?: boolean
 }) {
+  const muted = partial || cell?.carried
   return (
     <>
       <TableCell
         className={cn(
           CELL,
           bold && "font-semibold",
-          partial && "italic text-muted-foreground",
+          muted && "italic text-muted-foreground",
         )}
+        title={
+          cell?.carried
+            ? "Not published in this cycle; the previous cycle's nomination is shown"
+            : undefined
+        }
       >
         {formatBcf(cell?.bcf ?? null)}
       </TableCell>
@@ -68,7 +78,7 @@ function CellPair({
         className={cn(
           CELL,
           "text-xs",
-          partial
+          muted
             ? "italic text-muted-foreground"
             : PCT_COLOR[pctDirection(cell?.change_pct ?? null)],
         )}
@@ -229,6 +239,13 @@ export function NominationsMatrix({ table, period, latestDate }: Props) {
           </TableRow>
         </TableBody>
       </Table>
+      {period === "cycle" && (
+        <p className="text-xs text-muted-foreground">
+          Italic values were not published in that cycle, so the previous
+          cycle's nomination is shown. Cycles that have not happened yet are
+          blank.
+        </p>
+      )}
       {hasPartial && latestDate && (
         <p className="text-xs text-muted-foreground">
           * Data runs to {formatDay(latestDate, true)}, so the latest month is

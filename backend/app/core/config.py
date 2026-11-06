@@ -88,6 +88,10 @@ class Settings(BaseSettings):
     PIPELINE_NOMINATIONS_WOODMAC_TABLE: str = (
         "ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles"
     )
+    # Bronze keeps every nomination cycle; silver keeps only the latest one per day.
+    PIPELINE_NOMINATIONS_WOODMAC_CYCLES_TABLE: str = (
+        "ms_vulcan_gplng_plab.fundamentals_bronze.wm_genscape_pipeline_all_cycles"
+    )
 
     SENTRY_DSN: str | None = None
 
