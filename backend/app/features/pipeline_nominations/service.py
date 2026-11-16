@@ -245,7 +245,7 @@ class PipelineNominationsService:
                 text=text,
                 model=settings.PIPELINE_NOMINATIONS_AI_ENDPOINT,
                 latest_date=overview.latest_date,
-                generated_at=dt.datetime.now(dt.UTC),
+                generated_at=dt.datetime.now(dt.timezone.utc),
             )
             self._ai[key] = (time.monotonic(), result)
             return result

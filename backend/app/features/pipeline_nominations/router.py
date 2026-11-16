@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.dependencies import require_reader
@@ -13,6 +15,7 @@ from app.features.pipeline_nominations.schemas import (
 from app.features.pipeline_nominations.service import Selection
 
 router = APIRouter(dependencies=[Depends(require_reader)])
+logger = logging.getLogger(__name__)
 
 # Pairs are "facility::pipeline", joined with "|" (names contain commas but not these).
 _PAIR_SEPARATOR = "::"
@@ -55,6 +58,7 @@ def create_ai_overview(
     try:
         return service.ai_overview(source, _parse_selection(selected), refresh)
     except Exception as exc:
+        logger.exception("AI overview failed for source=%s", source)
         raise HTTPException(
             status_code=502, detail="Could not generate the AI overview"
         ) from exc
