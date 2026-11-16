@@ -4,6 +4,7 @@ import { RequestStatus } from "@/components/Common/RequestStatus"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AiOverview } from "@/features/pipeline_nominations/components/AiOverview"
 import { CycleChart } from "@/features/pipeline_nominations/components/CycleChart"
 import { FlowChart } from "@/features/pipeline_nominations/components/FlowChart"
 import {
@@ -176,6 +177,7 @@ export function PipelineNominationsPage() {
 
         {/* The table comes first as the main view, with the charts below it. */}
         <div className="flex min-w-0 flex-col gap-4">
+          <AiOverview source={source} selected={selectedTokens} />
           {overview ? (
             <section
               className="rounded-lg border p-4"

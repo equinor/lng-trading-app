@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.core.config import settings
@@ -12,6 +13,7 @@ HISTORY_MONTHS = 13
 CYCLE_LOOKBACK_DAYS = 14
 # Scheduled capacity is in Dth; this is the factor the silver table uses to get BCF.
 DTH_PER_BCF = 1_039_000
+_ENDPOINT_NAME = re.compile(r"[A-Za-z0-9_.-]+")
 
 
 class PipelineNominationsRepository:
@@ -59,6 +61,16 @@ class PipelineNominationsRepository:
             WHERE n.rn = 1 AND n.gas_day >= date_sub(latest.d, {CYCLE_LOOKBACK_DAYS})
         """
         return fetch_all(query)
+
+    @staticmethod
+    def ai_overview(prompt: str) -> str:
+        """Ask the serving endpoint through Databricks ai_query, which runs on the SQL warehouse."""
+        endpoint = settings.PIPELINE_NOMINATIONS_AI_ENDPOINT
+        # ai_query needs the endpoint name as a literal, so it is checked rather than passed as a parameter.
+        if not _ENDPOINT_NAME.fullmatch(endpoint):
+            raise ValueError("Invalid PIPELINE_NOMINATIONS_AI_ENDPOINT")
+        rows = fetch_all(f"SELECT ai_query('{endpoint}', ?) AS text", [prompt])
+        return str(rows[0]["text"] or "").strip() if rows else ""
 
     @staticmethod
     def _platts_query() -> str:

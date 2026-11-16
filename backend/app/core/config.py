@@ -15,7 +15,7 @@ def parse_cors(v: Any) -> list[str] | str:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file="../.env",          # keep as-is if your .env is at repo root
+        env_file="../.env",  # keep as-is if your .env is at repo root
         env_ignore_empty=True,
         extra="ignore",
     )
@@ -37,7 +37,9 @@ class Settings(BaseSettings):
 
     # --- CORS ---
     FRONTEND_HOST: str = "http://localhost:5173"
-    BACKEND_CORS_ORIGINS: Annotated[list[AnyUrl] | str, BeforeValidator(parse_cors)] = []
+    BACKEND_CORS_ORIGINS: Annotated[
+        list[AnyUrl] | str, BeforeValidator(parse_cors)
+    ] = []
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -92,6 +94,8 @@ class Settings(BaseSettings):
     PIPELINE_NOMINATIONS_WOODMAC_CYCLES_TABLE: str = (
         "ms_vulcan_gplng_plab.fundamentals_bronze.wm_genscape_pipeline_all_cycles"
     )
+    # Databricks Foundation Model serving endpoint used by ai_query for the AI overview.
+    PIPELINE_NOMINATIONS_AI_ENDPOINT: str = "databricks-claude-sonnet-5-5"
 
     SENTRY_DSN: str | None = None
 
@@ -114,7 +118,6 @@ class Settings(BaseSettings):
     @property
     def emails_enabled(self) -> bool:
         return bool(self.ATLAS_CLIENT_ID and self.ATLAS_CLIENT_SECRET)
-
 
 
 settings = Settings()  # type: ignore

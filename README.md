@@ -214,7 +214,8 @@ The page at `/pipeline_nominations` reproduces the "Platts US Daily Pipeline Nom
 | Part | File |
 |------|------|
 | Route (HTTP only) | `backend/app/features/pipeline_nominations/router.py` |
-| Service (cache, daily series, monthly and daily tables, % change) | `backend/app/features/pipeline_nominations/service.py` |
+| Service (cache, daily series, monthly and daily tables, % change, AI overview call) | `backend/app/features/pipeline_nominations/service.py` |
+| AI overview prompt (digest of the overview tables) | `backend/app/features/pipeline_nominations/ai_overview.py` |
 | Repository (one SQL query per source, plus one for the WoodMac cycle view) | `backend/app/features/pipeline_nominations/repository.py` |
 | Response models | `backend/app/features/pipeline_nominations/schemas.py` |
 | Service provider | `backend/app/features/pipeline_nominations/dependencies.py` |
@@ -239,11 +240,13 @@ Each repository query returns the same row shape (facility, pipeline, day, BCF) 
 |----------|---------|
 | `GET /api/v1/pipeline-nominations/filters?source=platts\|woodmac` | Facilities with their pipelines, and the latest data date, for one source (default `woodmac`) |
 | `GET /api/v1/pipeline-nominations/overview?source=platts\|woodmac&selected=Facility::Pipeline\|Facility::Pipeline` | The 14-day and 180-day daily series per facility, plus two tables with the same shape: `monthly_table` (one column per month) and `daily_table` (one column per day for the last 14 days). For `source=woodmac` it also returns `cycle_series` (the final nomination of each cycle for the last 7 gas days, per facility) and `cycle_table` (the last 3 gas days, one column per cycle); both are empty for Platts. An empty `selected` means everything. `source` defaults to `woodmac`. |
+| `POST /api/v1/pipeline-nominations/ai-overview?source=platts\|woodmac&selected=...&refresh=true` | A written summary (`text`, `model`, `latest_date`, `generated_at`) of the same view and filters. Cached for an hour per source, filter and latest date; `refresh=true` skips the cache. |
 
 **Behaviour to know about**
 
 - The 14 and 180 day windows end at the latest date in the data, not at today's date, so the charts are never empty when the feed is a few days behind. They share one **Flow BCF/d** chart with a 14 days / 180 days switch, newest day on the right. In both charts the latest value is written at the tail end of each line (labels that would overlap are spread apart, see `EndLabels.tsx`), and the legend sits below the chart.
 - The WoodMac cycle chart sits beside the flow chart. It shows one gas day at a time (a switch picks one of the last 5), with the cycles on the x axis and a line per facility, so every plant is visible and nothing is summed. A line only joins the cycles of its own day, because each point is that cycle's final nomination, not a value that holds over time. Facilities without cycle data are not drawn.
+- **AI overview.** A card at the top of the page shows a summary of the current view from a Databricks Foundation Model endpoint. The backend (`ai_overview.py`) turns the overview tables into a short text digest (daily totals, facility and pipeline moves, monthly averages and, for WoodMac, the latest day's cycle revisions) and sends it with `ai_query` over the existing SQL connection, so no extra credentials are needed. The model is told to use only that digest. Nothing is generated on the server until the page asks: the summary is requested when the page loads and again, about a second after you stop changing them, when the source or filter changes. A **Regenerate** button skips the server cache. The endpoint comes from `PIPELINE_NOMINATIONS_AI_ENDPOINT`.
 - The page shows the table first and the charts below it.
 - Month columns come from the whole dataset, so they stay the same while filtering.
 - The table has a toggle between **Month on month** and **Day on day**, and for WoodMac also **By cycle**. All tables arrive in the same response, so switching is instant. The number of day columns is `_DAILY_TABLE_DAYS` in the service.
@@ -562,6 +565,7 @@ lng-trading-app/
 | `PIPELINE_NOMINATIONS_PLATTS_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data` | Platts facility-level daily flow table |
 | `PIPELINE_NOMINATIONS_WOODMAC_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles` | WoodMac Genscape pipeline nominations table |
 | `PIPELINE_NOMINATIONS_WOODMAC_CYCLES_TABLE` | `ms_vulcan_gplng_plab.fundamentals_bronze.wm_genscape_pipeline_all_cycles` | WoodMac table that keeps every nomination cycle (by-cycle view) |
+| `PIPELINE_NOMINATIONS_AI_ENDPOINT` | `databricks-claude-sonnet-5-5` | Databricks serving endpoint that `ai_query` calls for the AI overview |
 | `SECRET_KEY` | random | JWT signing key |
 | `BACKEND_CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
 | `FIRST_SUPERUSER` | `admin@example.com` | Default admin user email |

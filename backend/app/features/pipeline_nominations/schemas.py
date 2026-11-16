@@ -49,7 +49,9 @@ class ColumnMeta(BaseModel):
 class MatrixCell(BaseModel):
     bcf: float | None
     change_pct: float | None  # against the previous column (month, day or cycle)
-    carried: bool = False  # cycle view: not published in this cycle, carried from the one before
+    carried: bool = (
+        False  # cycle view: not published in this cycle, carried from the one before
+    )
 
 
 class PipelineRow(BaseModel):
@@ -78,3 +80,10 @@ class OverviewResponse(BaseModel):
     # Only filled for the woodmac source, which publishes every nomination cycle.
     cycle_series: list[CycleSeries]
     cycle_table: MatrixTable
+
+
+class AiOverviewResponse(BaseModel):
+    text: str
+    model: str
+    latest_date: dt.date | None
+    generated_at: dt.datetime
