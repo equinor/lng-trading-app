@@ -4,6 +4,7 @@ import { RequestStatus } from "@/components/Common/RequestStatus"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { CycleChart } from "@/features/pipeline_nominations/components/CycleChart"
 import { FlowChart } from "@/features/pipeline_nominations/components/FlowChart"
 import {
   type MatrixPeriod,
@@ -18,13 +19,13 @@ import {
 } from "@/features/pipeline_nominations/api"
 import {
   buildColorMap,
-  formatCycleX,
   formatDay,
-  fromCycles,
   fromDaily,
 } from "@/features/pipeline_nominations/utils"
 
 const QUERY_ROOT = "pipeline_nominations"
+
+type FlowWindow = "14" | "180"
 const FIVE_MINUTES = 5 * 60_000
 const ONE_HOUR = 60 * 60_000
 
@@ -44,7 +45,7 @@ const SOURCES: Record<
     label: "WoodMac Genscape",
     title: "WoodMac Genscape US Daily Pipeline Nominations (Monthly)",
     description:
-      "WoodMac Genscape nominations to LNG plants. The monthly and daily views use the latest cycle of each day.",
+      "WoodMac Genscape nominations to LNG plants. The monthly and daily views use the latest cycle of each day. Costa Azul and LNG Canada are not covered by WoodMac, so their daily flow comes from Platts.",
   },
   platts: {
     label: "Platts",
@@ -61,12 +62,13 @@ export function PipelineNominationsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const selectedTokens = useMemo(() => [...selected].sort(), [selected])
   const [period, setPeriod] = useState<MatrixPeriod>("day")
+  const [flowWindow, setFlowWindow] = useState<FlowWindow>("14")
 
   // Pipeline names differ between providers, so a selection only makes sense for one source.
   const changeSource = (next: Source) => {
     setSource(next)
     setSelected(new Set())
-    // The cycle view only exists for WoodMac.
+    // The cycle view only exists for WoodMac; Platts has no intraday data yet.
     if (next === "platts") setPeriod((p) => (p === "cycle" ? "day" : p))
   }
 
@@ -106,6 +108,16 @@ export function PipelineNominationsPage() {
     day: overview.daily_table,
     cycle: overview.cycle_table,
   }
+  // Facilities without cycle data (Costa Azul, LNG Canada) stay in the cycle table, greyed out.
+  const noCycleData = useMemo(() => {
+    if (!overview || !hasCycles) return []
+    const withCycles = new Set(
+      overview.cycle_table.facilities.map((f) => f.name),
+    )
+    return overview.daily_table.facilities.filter(
+      (f) => !withCycles.has(f.name),
+    )
+  }, [overview, hasCycles])
 
   return (
     <div className="flex flex-col gap-4">
@@ -162,81 +174,90 @@ export function PipelineNominationsPage() {
           )}
         </aside>
 
-        <div className="min-w-0">
+        {/* The table comes first as the main view, with the charts below it. */}
+        <div className="flex min-w-0 flex-col gap-4">
           {overview ? (
-            <div className="grid gap-4 xl:grid-cols-2">
-              <FlowChart
-                title="Flow BCF/d (14 Days)"
-                series={fromDaily(overview.daily_14)}
-                colorOf={colorOf}
+            <section
+              className="rounded-lg border p-4"
+              aria-label="Nominated volume by metering station"
+            >
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-semibold">
+                    Nominated Volume BCF/d by Metering Station
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {PERIOD_SUBTITLE[period]}
+                  </p>
+                </div>
+                <Tabs
+                  value={period}
+                  onValueChange={(value) => setPeriod(value as MatrixPeriod)}
+                >
+                  <TabsList aria-label="Table period">
+                    <TabsTrigger value="day">Day on day</TabsTrigger>
+                    <TabsTrigger value="cycle" disabled={!hasCycles}>
+                      By cycle
+                    </TabsTrigger>
+                    <TabsTrigger value="month">Month on month</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+              <NominationsMatrix
+                table={tables?.[period] ?? overview.monthly_table}
+                period={period}
+                latestDate={latestDate}
+                unavailable={period === "cycle" ? noCycleData : undefined}
+                unavailableReason="No cycle data for this facility"
               />
+            </section>
+          ) : (
+            !overviewQuery.isError && <Skeleton className="h-96 w-full" />
+          )}
+
+          {overview ? (
+            <div
+              className={
+                hasCycles
+                  ? "grid items-start gap-4 xl:grid-cols-2"
+                  : "flex flex-col gap-4"
+              }
+            >
               <FlowChart
-                title="Flow BCF/d (180 Days)"
-                series={fromDaily(overview.daily_180)}
+                title="Flow BCF/d"
+                series={fromDaily(
+                  flowWindow === "14" ? overview.daily_14 : overview.daily_180,
+                )}
                 colorOf={colorOf}
                 showLegend
+                actions={
+                  <Tabs
+                    value={flowWindow}
+                    onValueChange={(value) =>
+                      setFlowWindow(value as FlowWindow)
+                    }
+                  >
+                    <TabsList aria-label="Flow chart window">
+                      <TabsTrigger value="14">14 days</TabsTrigger>
+                      <TabsTrigger value="180">180 days</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                }
               />
               {hasCycles && (
-                <div className="xl:col-span-2">
-                  <FlowChart
-                    title="Final nomination BCF/d by cycle (last 7 gas days)"
-                    series={fromCycles(overview.cycle_series)}
-                    colorOf={colorOf}
-                    step
-                    formatTick={formatCycleX}
-                    formatLabel={formatCycleX}
-                  />
-                </div>
+                <CycleChart series={overview.cycle_series} colorOf={colorOf} />
               )}
             </div>
           ) : (
             !overviewQuery.isError && (
               <div className="grid gap-4 xl:grid-cols-2">
                 <Skeleton className="h-80 w-full" />
-                <Skeleton className="h-80 w-full" />
+                {hasCycles && <Skeleton className="h-80 w-full" />}
               </div>
             )
           )}
         </div>
       </div>
-
-      {/* Outside the filter grid so the matrix spans the full page width. */}
-      {overview ? (
-        <section
-          className="rounded-lg border p-4"
-          aria-label="Nominated volume by metering station"
-        >
-          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold">
-                Nominated Volume BCF/d by Metering Station
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                {PERIOD_SUBTITLE[period]}
-              </p>
-            </div>
-            <Tabs
-              value={period}
-              onValueChange={(value) => setPeriod(value as MatrixPeriod)}
-            >
-              <TabsList aria-label="Table period">
-                <TabsTrigger value="day">Day on day</TabsTrigger>
-                {hasCycles && (
-                  <TabsTrigger value="cycle">By cycle</TabsTrigger>
-                )}
-                <TabsTrigger value="month">Month on month</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-          <NominationsMatrix
-            table={tables?.[period] ?? overview.monthly_table}
-            period={period}
-            latestDate={latestDate}
-          />
-        </section>
-      ) : (
-        !overviewQuery.isError && <Skeleton className="h-96 w-full" />
-      )}
     </div>
   )
 }

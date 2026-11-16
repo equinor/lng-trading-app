@@ -40,6 +40,8 @@ _CYCLE_LABELS = {"TI": "Timely", "EV": "Evening", "I1": "ID1", "I2": "ID2", "I3"
 _CYCLE_TTL = 3600.0
 _CYCLE_TABLE_DAYS = 3
 _CYCLE_CHART_DAYS = 7
+# Facilities that WoodMac does not cover; the WoodMac view takes their daily flow from Platts.
+_PLATTS_FACILITIES_IN_WOODMAC = frozenset({"Costa Azul LNG", "LNG Canada"})
 
 Selection = set[tuple[str, str]]  # (facility, pipeline); empty means everything
 
@@ -138,7 +140,17 @@ class PipelineNominationsService:
                 for row in self._repo.daily_by_pipeline(source)
             ]
 
-        return self._flows[source].get_or_load(loader)
+        flows = self._flows[source].get_or_load(loader)
+        if source == "woodmac" and flows:
+            # Not in the WoodMac table, so their daily numbers come from Platts. Days after
+            # WoodMac's last day are dropped so the latest date and the columns stay WoodMac's.
+            last = max(f.day for f in flows)
+            flows = flows + [
+                f
+                for f in self._load("platts")
+                if f.facility in _PLATTS_FACILITIES_IN_WOODMAC and f.day <= last
+            ]
+        return flows
 
     def _load_nominations(self) -> list[_Nomination]:
         def loader() -> list[_Nomination]:

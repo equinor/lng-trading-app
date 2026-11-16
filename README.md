@@ -221,7 +221,7 @@ The page at `/pipeline_nominations` reproduces the "Platts US Daily Pipeline Nom
 | API calls and types | `frontend/src/features/pipeline_nominations/api.ts` |
 | Page | `frontend/src/features/pipeline_nominations/pages/PipelineNominationsPage.tsx` |
 | Route (URL and title) | `frontend/src/routes/_layout/pipeline_nominations.tsx` |
-| Components | `frontend/src/features/pipeline_nominations/components/` (`PipelineFilter`, `FlowChart`, `NominationsMatrix`) |
+| Components | `frontend/src/features/pipeline_nominations/components/` (`PipelineFilter`, `FlowChart`, `CycleChart`, `NominationsMatrix`) |
 
 **Data.** Two tables, one per `source`, plus a bronze table for the WoodMac cycle view. The service account used by the backend needs `SELECT` on all three.
 
@@ -242,14 +242,16 @@ Each repository query returns the same row shape (facility, pipeline, day, BCF) 
 
 **Behaviour to know about**
 
-- The 14 and 180 day windows end at the latest date in the data, not at today's date, so the charts are never empty when the feed is a few days behind.
+- The 14 and 180 day windows end at the latest date in the data, not at today's date, so the charts are never empty when the feed is a few days behind. They share one **Flow BCF/d** chart with a 14 days / 180 days switch, newest day on the right. In both charts the latest value is written at the tail end of each line (labels that would overlap are spread apart, see `EndLabels.tsx`), and the legend sits below the chart.
+- The WoodMac cycle chart sits beside the flow chart. It shows one gas day at a time (a switch picks one of the last 5), with the cycles on the x axis and a line per facility, so every plant is visible and nothing is summed. A line only joins the cycles of its own day, because each point is that cycle's final nomination, not a value that holds over time. Facilities without cycle data are not drawn.
+- The page shows the table first and the charts below it.
 - Month columns come from the whole dataset, so they stay the same while filtering.
 - The table has a toggle between **Month on month** and **Day on day**, and for WoodMac also **By cycle**. All tables arrive in the same response, so switching is instant. The number of day columns is `_DAILY_TABLE_DAYS` in the service.
 - **Cycle view (WoodMac only).** Shows the final nomination of each of the five daily cycles: Timely (`TI`), Evening (`EV`), Intraday 1 to 3 (`I1`, `I2`, `I3`). The silver table keeps only the latest cycle per day, so this view reads the bronze table, keeps rows with `cycleStatus = 'Final'`, `locationRole = 'DELIVERY'` and `facilityType = 'LNG TERMINAL'`, and takes the newest row (by `insertTimestamp`) per gas day, location and cycle. Locations are then summed per facility and pipeline. The table covers the last `_CYCLE_TABLE_DAYS` (3) gas days and the chart the last `_CYCLE_CHART_DAYS` (7). The % is the change on the previous cycle of the same day, and the first cycle of a day has none. A cycle that has not happened yet is blank. If a location did not publish a cycle that has happened for other locations (the late intraday cycles are often missing), the previous cycle's value is carried forward and shown in italics. The backend caches this query for an hour (`_CYCLE_TTL`) and the page refetches every hour while the WoodMac source is open.
 - The % columns are changes against the previous column: the previous month, or the previous day. They are blank when the previous value is missing or zero. In the day view the first column's % still uses the day before the window.
 - The latest month is marked with `*` and shown in italics when the data stops before month end, because its % change compares a partial month with a full one.
 - The filter works like a Power BI slicer: ticking a facility selects all of its pipelines, expanding it lets you pick individual pipelines, and nothing ticked means everything.
-- Switching source clears the filter, because pipeline names differ between providers. Each source has its own latest date, so the chart windows and the day columns end at that source's last day. The facility lists differ too (WoodMac has Cove Point and no Costa Azul or LNG Canada).
+- Switching source clears the filter, because pipeline names differ between providers. Each source has its own latest date, so the chart windows and the day columns end at that source's last day. The facility lists differ too (WoodMac has Cove Point; Costa Azul and LNG Canada are not in the WoodMac table, so the WoodMac view takes their daily flow from Platts and they have no cycle data).
 - The latest WoodMac day usually holds an early nomination cycle, so it can still change.
 
 ## Authentication and Access Control

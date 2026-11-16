@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type {
+  FacilityRow,
   MatrixCell,
   MatrixTable,
 } from "@/features/pipeline_nominations/api"
@@ -27,6 +28,9 @@ type Props = {
   table: MatrixTable
   period: MatrixPeriod
   latestDate: string | null
+  /** Facilities with no data in this view; shown greyed out with empty cells. */
+  unavailable?: FacilityRow[]
+  unavailableReason?: string
 }
 
 // Newest values are on the left, so each change is against the column to its right.
@@ -117,17 +121,50 @@ export function NominationsMatrix({
   table: source,
   period,
   latestDate,
+  unavailable = [],
+  unavailableReason,
 }: Props) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // Facilities start collapsed, showing only their totals.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   // Most recent first, so the newest flow is on the left.
   const table = useMemo(() => newestFirst(source), [source])
   const { columns } = table
   const change = CHANGE_HEADER[period]
+  const rows = useMemo(
+    () =>
+      [
+        ...table.facilities.map((facility) => ({
+          facility,
+          greyedOut: false,
+        })),
+        ...unavailable.map((facility) => ({ facility, greyedOut: true })),
+      ].sort((a, b) => a.facility.name.localeCompare(b.facility.name)),
+    [table.facilities, unavailable],
+  )
+
+  const bodyRows = useMemo(
+    () =>
+      rows.flatMap(({ facility, greyedOut }) => {
+        const open = expanded.has(facility.name)
+        return [
+          { kind: "facility" as const, facility, greyedOut, open },
+          ...(open
+            ? facility.pipelines.map((pipeline) => ({
+                kind: "pipeline" as const,
+                facility: facility.name,
+                pipeline,
+                greyedOut,
+              }))
+            : []),
+        ]
+      }),
+    [rows, expanded],
+  )
 
   const toggle = (name: string) => {
-    const next = new Set(collapsed)
+    const next = new Set(expanded)
     if (!next.delete(name)) next.add(name)
-    setCollapsed(next)
+    setExpanded(next)
   }
 
   // Consecutive columns that share a group (a year for months, a month for days) get one header.
@@ -141,7 +178,7 @@ export function NominationsMatrix({
     [],
   )
 
-  if (table.facilities.length === 0) {
+  if (rows.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
         No data for the selected filters.
@@ -223,58 +260,82 @@ export function NominationsMatrix({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {table.facilities.map((facility) => {
-            const isCollapsed = collapsed.has(facility.name)
-            return (
-              <Fragment key={facility.name}>
-                <TableRow className="bg-muted/60 font-semibold">
-                  <TableCell className="sticky left-0 z-10 border-r bg-muted px-3 py-1.5">
-                    <button
-                      type="button"
-                      className="mr-2 inline-flex size-4 items-center justify-center rounded-sm border align-middle"
-                      aria-expanded={!isCollapsed}
-                      aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${facility.name}`}
-                      onClick={() => toggle(facility.name)}
-                    >
-                      {isCollapsed ? (
-                        <Plus className="size-3" />
-                      ) : (
-                        <Minus className="size-3" />
-                      )}
-                    </button>
-                    {facility.name}
+          {bodyRows.map((row, index) => {
+            // Alternate colours over the visible rows; sticky cells need the same opaque colour.
+            const zebra = index % 2 === 0 ? "bg-background" : "bg-muted"
+            const grey = row.greyedOut && "text-muted-foreground opacity-50"
+            const title = row.greyedOut ? unavailableReason : undefined
+            const cellsOf = (cells: MatrixCell[]) =>
+              row.greyedOut ? [] : cells
+
+            if (row.kind === "pipeline") {
+              return (
+                <TableRow
+                  key={`${row.facility}::${row.pipeline.name}`}
+                  className={cn(zebra, grey)}
+                  title={title}
+                >
+                  <TableCell
+                    className={cn(
+                      "sticky left-0 z-10 max-w-56 border-r py-1.5 pr-2 pl-10 font-normal whitespace-normal",
+                      zebra,
+                    )}
+                  >
+                    {row.pipeline.name}
                   </TableCell>
                   {columns.map((column, i) => (
                     <CellPair
                       key={column.key}
-                      cell={facility.cells[i]}
+                      cell={cellsOf(row.pipeline.cells)[i]}
                       partial={column.partial}
                       groupStart={startsGroup(i)}
-                      bold
                     />
                   ))}
                 </TableRow>
-                {!isCollapsed &&
-                  facility.pipelines.map((pipeline) => (
-                    <TableRow key={pipeline.name}>
-                      <TableCell className="sticky left-0 z-10 max-w-56 border-r bg-background py-1.5 pr-2 pl-10 font-normal whitespace-normal">
-                        {pipeline.name}
-                      </TableCell>
-                      {columns.map((column, i) => (
-                        <CellPair
-                          key={column.key}
-                          cell={pipeline.cells[i]}
-                          partial={column.partial}
-                          groupStart={startsGroup(i)}
-                        />
-                      ))}
-                    </TableRow>
-                  ))}
-              </Fragment>
+              )
+            }
+
+            return (
+              <TableRow
+                key={row.facility.name}
+                className={cn(zebra, "font-semibold", grey)}
+                title={title}
+              >
+                <TableCell
+                  className={cn(
+                    "sticky left-0 z-10 border-r px-3 py-1.5",
+                    zebra,
+                  )}
+                >
+                  <button
+                    type="button"
+                    className="mr-2 inline-flex size-4 items-center justify-center rounded-sm border align-middle"
+                    aria-expanded={row.open}
+                    aria-label={`${row.open ? "Collapse" : "Expand"} ${row.facility.name}`}
+                    onClick={() => toggle(row.facility.name)}
+                  >
+                    {row.open ? (
+                      <Minus className="size-3" />
+                    ) : (
+                      <Plus className="size-3" />
+                    )}
+                  </button>
+                  {row.facility.name}
+                </TableCell>
+                {columns.map((column, i) => (
+                  <CellPair
+                    key={column.key}
+                    cell={cellsOf(row.facility.cells)[i]}
+                    partial={column.partial}
+                    groupStart={startsGroup(i)}
+                    bold
+                  />
+                ))}
+              </TableRow>
             )
           })}
-          <TableRow className="border-t-2 bg-muted/60 font-semibold">
-            <TableCell className="sticky left-0 z-10 border-r bg-muted px-3 py-1.5">
+          <TableRow className="border-t-2 bg-secondary font-semibold">
+            <TableCell className="sticky left-0 z-10 border-r bg-secondary px-3 py-1.5">
               Total
             </TableCell>
             {columns.map((column, i) => (
@@ -293,7 +354,7 @@ export function NominationsMatrix({
         <p className="text-xs text-muted-foreground">
           Italic values were not published in that cycle, so the previous
           cycle's nomination is shown. Cycles that have not happened yet are
-          blank.
+          blank. Greyed-out facilities have no cycle data.
         </p>
       )}
       {hasPartial && latestDate && (

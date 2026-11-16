@@ -1,6 +1,6 @@
 import type { CycleSeries, DailySeries } from "./api"
 
-/** A line per facility; `x` is a day (YYYY-MM-DD) or a day and cycle ("YYYY-MM-DD|2"). */
+/** A line per facility; `x` is a day (YYYY-MM-DD). */
 export type ChartSeries = {
   name: string
   points: { x: string; bcf: number }[]
@@ -21,14 +21,52 @@ const CYCLES = [
   { code: "I3", label: "ID3" },
 ]
 
-export const fromCycles = (series: CycleSeries[]): ChartSeries[] =>
-  series.map((s) => ({
-    name: s.name,
-    points: s.points.map((p) => ({
-      x: `${p.gas_day}|${CYCLES.findIndex((c) => c.code === p.cycle) + 1}`,
-      bcf: p.bcf,
-    })),
-  }))
+/** The gas days present in the cycle data, newest first. */
+export const cycleDays = (series: CycleSeries[]): string[] =>
+  [...new Set(series.flatMap((s) => s.points.map((p) => p.gas_day)))]
+    .sort()
+    .reverse()
+
+/**
+ * One gas day's nomination of each cycle: one row per cycle and one column per facility. A
+ * facility has no value for cycles that have not happened yet.
+ */
+export function cycleRowsForDay(
+  series: CycleSeries[],
+  day: string,
+): Record<string, number | string>[] {
+  return CYCLES.map(({ code, label }) => {
+    const row: Record<string, number | string> = { cycle: label }
+    for (const { name, points } of series) {
+      const point = points.find((p) => p.gas_day === day && p.cycle === code)
+      if (point) row[name] = point.bcf
+    }
+    return row
+  })
+}
+
+/** Both charts share this height so they line up side by side. */
+export const CHART_HEIGHT = 460
+
+/**
+ * Y axis from zero with a tick every 0.25 to 1 BCF/d, depending on the range, so the lines have
+ * a fine grid to read against.
+ */
+export function yAxisScale(values: number[]): {
+  ticks: number[]
+  max: number
+  format: (value: number) => string
+} {
+  const peak = Math.max(0, ...values)
+  const step = peak <= 2 ? 0.25 : peak <= 6 ? 0.5 : 1
+  const max = Math.max(step, Math.ceil(peak / step) * step)
+  const count = Math.round(max / step)
+  return {
+    ticks: Array.from({ length: count + 1 }, (_, i) => i * step),
+    max,
+    format: (value) => value.toFixed(step < 0.5 ? 2 : 1),
+  }
+}
 
 // Stable per-facility colours: the index comes from the full facility list, not the filtered one.
 const PALETTE = [
@@ -70,12 +108,6 @@ export function formatDay(iso: string, withYear = false) {
     month: "short",
     ...(withYear ? { year: "numeric" } : {}),
   })
-}
-
-/** Axis text for a cycle point, for example "4 Nov ID1". */
-export function formatCycleX(x: string) {
-  const [day, order] = x.split("|")
-  return `${formatDay(day)} ${CYCLES[Number(order) - 1]?.label ?? ""}`
 }
 
 /** One row per x value with a column per facility, the shape Recharts expects. */
