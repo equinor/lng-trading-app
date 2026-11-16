@@ -29,10 +29,11 @@ const FIVE_MINUTES = 5 * 60_000
 const ONE_HOUR = 60 * 60_000
 
 const PERIOD_SUBTITLE: Record<MatrixPeriod, string> = {
-  month: "Monthly totals and change on the previous month.",
-  day: "Daily volumes for the last 14 days and change on the previous day.",
+  day: "Daily volumes for the last 14 days and change on the previous day. Newest on the left.",
   cycle:
-    "Final nomination of each cycle (Timely, Evening, ID1 to ID3) for the last 3 gas days. The % is the change on the previous cycle of the same day. Refreshed every hour.",
+    "Final nomination of each cycle (Timely, Evening, ID1 to ID3) for the last 3 gas days. The % is the change on the previous cycle of the same day. Newest on the left. Refreshed every hour.",
+  month:
+    "Average daily volume of each month and change on the previous month. Newest on the left.",
 }
 
 const SOURCES: Record<
@@ -59,7 +60,7 @@ export function PipelineNominationsPage() {
   // Empty selection means every facility and pipeline.
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const selectedTokens = useMemo(() => [...selected].sort(), [selected])
-  const [period, setPeriod] = useState<MatrixPeriod>("month")
+  const [period, setPeriod] = useState<MatrixPeriod>("day")
 
   // Pipeline names differ between providers, so a selection only makes sense for one source.
   const changeSource = (next: Source) => {
@@ -113,7 +114,7 @@ export function PipelineNominationsPage() {
           <h1 className="text-2xl font-semibold">{SOURCES[source].title}</h1>
           <p className="text-sm text-muted-foreground">
             {latestDate ? `Data to ${formatDay(latestDate, true)}. ` : ""}
-            Volumes in BCF. {SOURCES[source].description} Leave the filter empty to
+            Volumes in BCF per day. {SOURCES[source].description} Leave the filter empty to
             include every facility.
           </p>
           {overviewQuery.isFetching && (
@@ -165,12 +166,12 @@ export function PipelineNominationsPage() {
           {overview ? (
             <div className="grid gap-4 xl:grid-cols-2">
               <FlowChart
-                title="Flow BCF (14 Days)"
+                title="Flow BCF/d (14 Days)"
                 series={fromDaily(overview.daily_14)}
                 colorOf={colorOf}
               />
               <FlowChart
-                title="Flow BCF (180 Days)"
+                title="Flow BCF/d (180 Days)"
                 series={fromDaily(overview.daily_180)}
                 colorOf={colorOf}
                 showLegend
@@ -178,7 +179,7 @@ export function PipelineNominationsPage() {
               {hasCycles && (
                 <div className="xl:col-span-2">
                   <FlowChart
-                    title="Final nomination by cycle (last 7 gas days)"
+                    title="Final nomination BCF/d by cycle (last 7 gas days)"
                     series={fromCycles(overview.cycle_series)}
                     colorOf={colorOf}
                     step
@@ -208,7 +209,7 @@ export function PipelineNominationsPage() {
           <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold">
-                Nominated Volume BCF by Metering Station
+                Nominated Volume BCF/d by Metering Station
               </h2>
               <p className="text-xs text-muted-foreground">
                 {PERIOD_SUBTITLE[period]}
@@ -219,11 +220,11 @@ export function PipelineNominationsPage() {
               onValueChange={(value) => setPeriod(value as MatrixPeriod)}
             >
               <TabsList aria-label="Table period">
-                <TabsTrigger value="month">Month on month</TabsTrigger>
                 <TabsTrigger value="day">Day on day</TabsTrigger>
                 {hasCycles && (
                   <TabsTrigger value="cycle">By cycle</TabsTrigger>
                 )}
+                <TabsTrigger value="month">Month on month</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>

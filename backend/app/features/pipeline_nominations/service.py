@@ -194,7 +194,9 @@ class PipelineNominationsService:
             latest_date=latest,
             daily_14=self._daily(chosen, latest, _SHORT_WINDOW_DAYS),
             daily_180=self._daily(chosen, latest, _LONG_WINDOW_DAYS),
-            monthly_table=self._matrix(chosen, months, _month_key),
+            monthly_table=self._matrix(
+                chosen, months, _month_key, days_per_column=self._days_per_month(flows)
+            ),
             daily_table=self._matrix(chosen, days, _day_key, show_last=_DAILY_TABLE_DAYS),
             cycle_series=cycle_series,
             cycle_table=cycle_table,
@@ -285,6 +287,14 @@ class PipelineNominationsService:
         ]
 
     @staticmethod
+    def _days_per_month(flows: list[_Flow]) -> dict[str, int]:
+        """Days with data in each month, from the full dataset so the filter does not change it."""
+        days: dict[str, set[dt.date]] = defaultdict(set)
+        for f in flows:
+            days[_month_key(f)].add(f.day)
+        return {month: len(values) for month, values in days.items()}
+
+    @staticmethod
     def _day_columns(flows: list[_Flow]) -> list[ColumnMeta]:
         return [
             ColumnMeta(
@@ -316,8 +326,12 @@ class PipelineNominationsService:
         key_of: Callable[[_Flow], str],
         show_last: int | None = None,
         change_within_group: bool = False,
+        days_per_column: dict[str, int] | None = None,
     ) -> MatrixTable:
-        """Volume per facility and pipeline for each column, with % change on the previous column."""
+        """Volume per facility and pipeline for each column, with % change on the previous column.
+
+        With `days_per_column`, each column holds the average per day instead of the sum.
+        """
         sums: dict[tuple[str, str, str], float] = defaultdict(float)
         carried_at: set[tuple[str, str, str]] = set()
         for f in flows:
@@ -325,6 +339,9 @@ class PipelineNominationsService:
             sums[key] += f.bcf
             if f.carried:
                 carried_at.add(key)
+        if days_per_column:
+            for key in sums:
+                sums[key] /= days_per_column.get(key[2]) or 1
 
         pipelines: dict[str, set[str]] = defaultdict(set)
         for facility, pipeline, _ in sums:

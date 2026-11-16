@@ -20,7 +20,7 @@ type Props = {
   series: ChartSeries[]
   colorOf: (name: string) => string
   showLegend?: boolean
-  /** Draw steps instead of slopes, for values that hold until the next update. */
+  /** Draw steps instead of slopes, for values that hold until the next update. The x axis runs newest to oldest. */
   step?: boolean
   formatTick?: (x: string) => string
   formatLabel?: (x: string) => string
@@ -58,6 +58,7 @@ export function FlowChart({
               />
               <XAxis
                 dataKey="x"
+                reversed
                 tickFormatter={formatTick}
                 tick={{ fill: "currentColor", fontSize: 11 }}
                 minTickGap={28}
@@ -66,7 +67,7 @@ export function FlowChart({
                 tick={{ fill: "currentColor", fontSize: 11 }}
                 tickFormatter={(value: number) => value.toFixed(1)}
                 label={{
-                  value: "Sum of Vol_BCF",
+                  value: "BCF/d",
                   angle: -90,
                   position: "insideLeft",
                   fill: "currentColor",
@@ -98,7 +99,7 @@ export function FlowChart({
               {series.map((s) => (
                 <Line
                   key={s.name}
-                  type={step ? "stepAfter" : "monotone"}
+                  type={step ? "stepBefore" : "monotone"}
                   dataKey={s.name}
                   stroke={colorOf(s.name)}
                   strokeWidth={2}
