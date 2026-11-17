@@ -96,6 +96,15 @@ class Settings(BaseSettings):
     )
     # Databricks Foundation Model serving endpoint used by ai_query for the AI overview.
     PIPELINE_NOMINATIONS_AI_ENDPOINT: str = "databricks-claude-sonnet-5-5"
+    MID_TERM_CURVE_BUILDER_TABLE: str = (
+        "ms_vulcan_gplng_plab.prices_silver.mid_term_curve_builder"
+    )
+    MID_TERM_CURVE_BUILDER_EPA_TABLE: str = (
+        "ms_vulcan_gplng_plab.prices_silver.mid_term_curve_builder_epa"
+    )
+    MID_TERM_CURVE_BUILDER_CUSTOM_TABLE: str = (
+        "ms_vulcan_gplng_plab.prices_silver.mid_term_curve_builder_custom"
+    )
 
     SENTRY_DSN: str | None = None
 

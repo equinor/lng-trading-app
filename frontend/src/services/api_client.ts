@@ -1,4 +1,4 @@
-type HttpMethod = "GET" | "POST" | "PATCH"
+type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE"
 
 type RequestOptions = {
   method?: HttpMethod

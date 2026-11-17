@@ -7,14 +7,20 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar"
 
-export type Item = {
-  icon: LucideIcon
-  title: string
-  path: string
-}
+export type Item =
+  | {
+      icon: LucideIcon
+      title: string
+      path: string
+    }
+  | {
+      type: "separator"
+      key: string
+    }
 
 interface MainProps {
   items: Item[]
@@ -36,6 +42,10 @@ export function Main({ items }: MainProps) {
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => {
+            if ("type" in item) {
+              return <SidebarSeparator key={item.key} />
+            }
+
             const isActive = currentPath === item.path
 
             return (
