@@ -128,7 +128,7 @@ flowchart TB
     API --> J["Databricks Jobs API<br/>(pipeline button)"]
 ```
 
-Each page is a feature: a folder under `backend/app/features/` (`news`, `pipeline_nominations`, `lng_balance`, `pipeline`) and one under `frontend/src/features/`. Each layer has one job:
+Each page is a feature: a folder under `backend/app/features/` (`news`, `pipeline_nominations`, `lng_balance`, `pipeline`, `mid_term_curves`) and one under `frontend/src/features/`. Each layer has one job:
 
 | Layer | Responsibility |
 |-------|----------------|
@@ -300,6 +300,27 @@ The page at `/lng_balance` shows the LNG balance model: supply, demand and **net
 - **Choosing the forecast shown.** The **Forecast shown** selector at the top of the page (Latest, quick picks, or any date) sets one forecast for the table, the Supply and Demand chart and the blue net short line. For an older forecast, days before its date are actuals from the latest table and days after are that date's snapshot from the history table. A badge on the page title, the table and each chart says which forecast is shown: blue for the latest, amber for an older one. Views of past forecasts are cached in memory (24 per side).
 - **Comparing forecasts.** The **Compare with other forecasts** panel, always shown above the net short chart, has quick picks (1 week, 1 month, 3 months, 6 months, 1 year before the newest forecast, each snapped to the nearest earlier date that exists) and a date field. Each chosen forecast date adds one line, coloured to match its chip, showing supply minus demand as it was forecast on that date, drawn over the forecast shown for the page. The country filters, unit and year chips apply to these lines too. Up to 12 can be shown. A forecast only covers days from its own date, so when that date is not the 1st its first month is left out rather than shown as a false dip, and months past the end of demand are dropped. The backend reads only the requested `forecast_date`s from the history tables and keeps them in memory, since a past forecast never changes.
 - Years start collapsed in the table. A year expands into quarters and a quarter into months; the month rows come from the same `months` list the charts use, so they need no extra request. The net column is shaded by size, scaled separately for year, quarter and month rows.
+
+## Mid-term Curves page
+
+The page at `/mid_term_curves` shows monthly price curves in three tabs: **Curve builder** (pick a curve per month and save the result as a custom curve), **Compare curves** (chart of standard and saved curves) and **Available curves** (table of every standard curve). The From / To filter and the Excel / CSV export in the page header apply to the active tab.
+
+| Part | File |
+|------|------|
+| Route (HTTP only) | `backend/app/features/mid_term_curves/router.py` |
+| Service (price cache, logging, custom-curve save and delete) | `backend/app/features/mid_term_curves/service.py` |
+| Curve formulas (crude, China, US marginal, shipping) in plain Python | `backend/app/features/mid_term_curves/curves.py` |
+| Repository (SQL only: ICE and EPA monthly prices, custom-curve table) | `backend/app/features/mid_term_curves/repository.py` |
+| Response models | `backend/app/features/mid_term_curves/schemas.py` |
+| API calls and types | `frontend/src/features/mid_term_curves/api.ts` |
+| Curve catalogue, default selection and palette | `frontend/src/features/mid_term_curves/curves.ts`, `compareDefaults.ts`, `palette.ts` |
+| Page (header, tabs, shared date range and export) | `frontend/src/features/mid_term_curves/pages/MidTermCurvesPage.tsx` |
+| Route (URL and title) | `frontend/src/routes/_layout/mid_term_curves.tsx` |
+| Components and hooks | `frontend/src/features/mid_term_curves/components/`, `hooks/` |
+
+**Endpoints** (`/api/v1/mid-term-curves`): `GET /prices` (Reader; `refresh=true` skips the 15 minute server cache), `GET /custom-curves` (Reader), `POST /custom-curves`, `PATCH /custom-curves/{curve_id}` and `DELETE /custom-curves/{curve_id}` (Writer).
+
+The SQL only reads the ICE and EPA prices. The derived curves are calculated in `curves.py`, so a formula change does not touch the query. Tests are in `backend/tests/features/test_mid_term_curves.py`. The page keeps its selections (tab, compared curves, colours, chart options) in the browser's local storage.
 
 ## Authentication and Access Control
 
@@ -553,6 +574,7 @@ lng-trading-app/
 │   │   │   │   └── email_summary.py      # Summary email builder
 │   │   │   ├── pipeline_nominations/     # router, service, repository, schemas, dependencies
 │   │   │   ├── lng_balance/              # router, service, repository, regions, schemas, dependencies
+│   │   │   ├── mid_term_curves/          # router, service, repository, schemas, curves (formulas)
 │   │   │   └── pipeline/                 # router.py + jobs.py (Databricks job trigger / status)
 │   │   └── core/
 │   │       ├── config.py        # All configuration (loaded from .env)
@@ -565,7 +587,7 @@ lng-trading-app/
 │   ├── src/
 │   │   ├── main.tsx            # App entry point
 │   │   ├── routes/             # TanStack Router file-based routes: thin files with URL and title only
-│   │   │   └── _layout/        # newsletter, news_summary, news_summary_condensed, pipeline_nominations, lng_balance
+│   │   │   └── _layout/        # index (dashboard), mid_term_curves, newsletter, news_summary, news_summary_condensed, pipeline_nominations, lng_balance
 │   │   ├── features/           # One folder per feature (page)
 │   │   │   ├── news/
 │   │   │   │   ├── pages/       # NewsletterPage, NewsSummaryPage, NewsSummaryCondensedPage
@@ -575,6 +597,7 @@ lng-trading-app/
 │   │   │   │   ├── utils.ts     # Helpers (formatTime, cleanTagValue, etc.)
 │   │   │   │   └── layout.ts    # Layout and grouping logic
 │   │   │   ├── lng_balance/            # pages, components (BalanceFilter, NetShortTable, SupplyDemandChart, NetShortChart), api.ts, utils.ts
+│   │   │   ├── mid_term_curves/        # pages, components, hooks, api.ts, curves.ts, utils.ts
 │   │   │   └── pipeline_nominations/   # pages, components (PipelineFilter, FlowChart, NominationsMatrix), api.ts, utils.ts
 │   │   ├── components/         # Shared UI: ui/ (shadcn), Common/ (incl. EndLabels, ChartLegend), Sidebar/
 │   │   ├── hooks/              # Shared hooks (useAuth, useDateFilter, useEquinorFont, ...)

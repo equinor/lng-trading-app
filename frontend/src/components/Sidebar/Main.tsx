@@ -7,20 +7,29 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { IconTile, type IconTone } from "./IconTile"
 
-export type Item = {
-  icon: LucideIcon
-  title: string
-  path: string
-}
+export type Item =
+  | {
+      icon: LucideIcon
+      tone: IconTone
+      title: string
+      path: string
+    }
+  | {
+      type: "separator"
+      key: string
+    }
 
 interface MainProps {
   items: Item[]
+  className?: string
 }
 
-export function Main({ items }: MainProps) {
+export function Main({ items, className }: MainProps) {
   const { isMobile, setOpenMobile } = useSidebar()
   const router = useRouterState()
   const currentPath = router.location.pathname
@@ -32,10 +41,14 @@ export function Main({ items }: MainProps) {
   }
 
   return (
-    <SidebarGroup>
+    <SidebarGroup className={className}>
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => {
+            if ("type" in item) {
+              return <SidebarSeparator key={item.key} />
+            }
+
             const isActive = currentPath === item.path
 
             return (
@@ -43,10 +56,11 @@ export function Main({ items }: MainProps) {
                 <SidebarMenuButton
                   tooltip={item.title}
                   isActive={isActive}
+                  className="h-auto min-h-[33.6px] py-[7px] text-[13.2px] font-medium leading-tight [&>span:last-child]:overflow-visible [&>span:last-child]:whitespace-normal group-data-[collapsible=icon]:p-1! group-data-[collapsible=icon]:[&>span:last-child]:hidden"
                   asChild
                 >
                   <RouterLink to={item.path} onClick={handleMenuClick}>
-                    <item.icon />
+                    <IconTile icon={item.icon} tone={item.tone} />
                     <span>{item.title}</span>
                   </RouterLink>
                 </SidebarMenuButton>
