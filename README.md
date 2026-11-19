@@ -128,7 +128,7 @@ flowchart TB
     API --> J["Databricks Jobs API<br/>(pipeline button)"]
 ```
 
-Each page is a feature: a folder under `backend/app/features/` (`news`, `pipeline_nominations`, `pipeline`) and one under `frontend/src/features/`. Each layer has one job:
+Each page is a feature: a folder under `backend/app/features/` (`news`, `pipeline_nominations`, `pipeline`, `mid_term_curves`) and one under `frontend/src/features/`. Each layer has one job:
 
 | Layer | Responsibility |
 |-------|----------------|
@@ -256,6 +256,27 @@ Each repository query returns the same row shape (facility, pipeline, day, BCF) 
 - The filter works like a Power BI slicer: ticking a facility selects all of its pipelines, expanding it lets you pick individual pipelines, and nothing ticked means everything.
 - Switching source clears the filter, because pipeline names differ between providers. Each source has its own latest date, so the chart windows and the day columns end at that source's last day. The facility lists differ too (WoodMac has Cove Point; Costa Azul and LNG Canada are not in the WoodMac table, so the WoodMac view takes their daily flow from Platts and they have no cycle data).
 - The latest WoodMac day usually holds an early nomination cycle, so it can still change.
+
+## Mid-term Curves page
+
+The page at `/mid_term_curves` shows monthly price curves in three tabs: **Curve builder** (pick a curve per month and save the result as a custom curve), **Compare curves** (chart of standard and saved curves) and **Available curves** (table of every standard curve). The From / To filter and the Excel / CSV export in the page header apply to the active tab.
+
+| Part | File |
+|------|------|
+| Route (HTTP only) | `backend/app/features/mid_term_curves/router.py` |
+| Service (price cache, logging, custom-curve save and delete) | `backend/app/features/mid_term_curves/service.py` |
+| Curve formulas (crude, China, US marginal, shipping) in plain Python | `backend/app/features/mid_term_curves/curves.py` |
+| Repository (SQL only: ICE and EPA monthly prices, custom-curve table) | `backend/app/features/mid_term_curves/repository.py` |
+| Response models | `backend/app/features/mid_term_curves/schemas.py` |
+| API calls and types | `frontend/src/features/mid_term_curves/api.ts` |
+| Curve catalogue, default selection and palette | `frontend/src/features/mid_term_curves/curves.ts`, `compareDefaults.ts`, `palette.ts` |
+| Page (header, tabs, shared date range and export) | `frontend/src/features/mid_term_curves/pages/MidTermCurvesPage.tsx` |
+| Route (URL and title) | `frontend/src/routes/_layout/mid_term_curves.tsx` |
+| Components and hooks | `frontend/src/features/mid_term_curves/components/`, `hooks/` |
+
+**Endpoints** (`/api/v1/mid-term-curves`): `GET /prices` (Reader; `refresh=true` skips the 15 minute server cache), `GET /custom-curves` (Reader), `POST /custom-curves`, `PATCH /custom-curves/{curve_id}` and `DELETE /custom-curves/{curve_id}` (Writer).
+
+The SQL only reads the ICE and EPA prices. The derived curves are calculated in `curves.py`, so a formula change does not touch the query. Tests are in `backend/tests/features/test_mid_term_curves.py`. The page keeps its selections (tab, compared curves, colours, chart options) in the browser's local storage.
 
 ## Authentication and Access Control
 
@@ -508,6 +529,7 @@ lng-trading-app/
 │   │   │   │   ├── normalization.py      # Tag and region normalization
 │   │   │   │   └── email_summary.py      # Summary email builder
 │   │   │   ├── pipeline_nominations/     # router, service, repository, schemas, dependencies
+│   │   │   ├── mid_term_curves/          # router, service, repository, schemas, curves (formulas)
 │   │   │   └── pipeline/                 # router.py + jobs.py (Databricks job trigger / status)
 │   │   └── core/
 │   │       ├── config.py        # All configuration (loaded from .env)
@@ -520,7 +542,7 @@ lng-trading-app/
 │   ├── src/
 │   │   ├── main.tsx            # App entry point
 │   │   ├── routes/             # TanStack Router file-based routes: thin files with URL and title only
-│   │   │   └── _layout/        # newsletter, news_summary, news_summary_condensed, pipeline_nominations
+│   │   │   └── _layout/        # index (dashboard), mid_term_curves, newsletter, news_summary, news_summary_condensed, pipeline_nominations
 │   │   ├── features/           # One folder per feature (page)
 │   │   │   ├── news/
 │   │   │   │   ├── pages/       # NewsletterPage, NewsSummaryPage, NewsSummaryCondensedPage
@@ -529,6 +551,7 @@ lng-trading-app/
 │   │   │   │   ├── api.ts       # API functions (getNews, patch*)
 │   │   │   │   ├── utils.ts     # Helpers (formatTime, cleanTagValue, etc.)
 │   │   │   │   └── layout.ts    # Layout and grouping logic
+│   │   │   ├── mid_term_curves/        # pages, components, hooks, api.ts, curves.ts, utils.ts
 │   │   │   └── pipeline_nominations/   # pages, components (PipelineFilter, FlowChart, NominationsMatrix), api.ts, utils.ts
 │   │   ├── components/         # Shared UI: ui/ (shadcn), Common/, Sidebar/
 │   │   ├── hooks/              # Shared hooks (useAuth, useDateFilter, useEquinorFont, ...)

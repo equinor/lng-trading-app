@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.features.news.router import router as news_router
 from app.features.pipeline.router import router as pipeline_router
 from app.features.pipeline_nominations.router import router as pipeline_nominations_router
+from app.features.mid_term_curves.router import router as mid_term_curves_router
 
 api_router = APIRouter()
 # api_router.include_router(login.router)
@@ -15,6 +16,11 @@ api_router.include_router(
     pipeline_nominations_router,
     prefix="/pipeline-nominations",
     tags=["pipeline-nominations"],
+)
+api_router.include_router(
+    mid_term_curves_router,
+    prefix="/mid-term-curves",
+    tags=["mid-term-curves"],
 )
 api_router.include_router(utils.router, prefix="/utils", tags=["utils"])
 # api_router.include_router(items.router)

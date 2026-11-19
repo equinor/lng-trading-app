@@ -15,6 +15,7 @@ import { Route as LayoutPipeline_nominationsRouteImport } from './routes/_layout
 import { Route as LayoutNewsletterRouteImport } from './routes/_layout/newsletter'
 import { Route as LayoutNews_summary_condensedRouteImport } from './routes/_layout/news_summary_condensed'
 import { Route as LayoutNews_summaryRouteImport } from './routes/_layout/news_summary'
+import { Route as LayoutMid_term_curvesRouteImport } from './routes/_layout/mid_term_curves'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -47,15 +48,22 @@ const LayoutNews_summaryRoute = LayoutNews_summaryRouteImport.update({
   path: '/news_summary',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutMid_term_curvesRoute = LayoutMid_term_curvesRouteImport.update({
+  id: '/mid_term_curves',
+  path: '/mid_term_curves',
+  getParentRoute: () => LayoutRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
+  '/mid_term_curves': typeof LayoutMid_term_curvesRoute
   '/news_summary': typeof LayoutNews_summaryRoute
   '/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
   '/newsletter': typeof LayoutNewsletterRoute
   '/pipeline_nominations': typeof LayoutPipeline_nominationsRoute
 }
 export interface FileRoutesByTo {
+  '/mid_term_curves': typeof LayoutMid_term_curvesRoute
   '/news_summary': typeof LayoutNews_summaryRoute
   '/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
   '/newsletter': typeof LayoutNewsletterRoute
@@ -65,6 +73,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
+  '/_layout/mid_term_curves': typeof LayoutMid_term_curvesRoute
   '/_layout/news_summary': typeof LayoutNews_summaryRoute
   '/_layout/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
   '/_layout/newsletter': typeof LayoutNewsletterRoute
@@ -75,12 +84,14 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/mid_term_curves'
     | '/news_summary'
     | '/news_summary_condensed'
     | '/newsletter'
     | '/pipeline_nominations'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/mid_term_curves'
     | '/news_summary'
     | '/news_summary_condensed'
     | '/newsletter'
@@ -89,6 +100,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_layout'
+    | '/_layout/mid_term_curves'
     | '/_layout/news_summary'
     | '/_layout/news_summary_condensed'
     | '/_layout/newsletter'
@@ -144,10 +156,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutNews_summaryRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/mid_term_curves': {
+      id: '/_layout/mid_term_curves'
+      path: '/mid_term_curves'
+      fullPath: '/mid_term_curves'
+      preLoaderRoute: typeof LayoutMid_term_curvesRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
 interface LayoutRouteChildren {
+  LayoutMid_term_curvesRoute: typeof LayoutMid_term_curvesRoute
   LayoutNews_summaryRoute: typeof LayoutNews_summaryRoute
   LayoutNews_summary_condensedRoute: typeof LayoutNews_summary_condensedRoute
   LayoutNewsletterRoute: typeof LayoutNewsletterRoute
@@ -156,6 +176,7 @@ interface LayoutRouteChildren {
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutMid_term_curvesRoute: LayoutMid_term_curvesRoute,
   LayoutNews_summaryRoute: LayoutNews_summaryRoute,
   LayoutNews_summary_condensedRoute: LayoutNews_summary_condensedRoute,
   LayoutNewsletterRoute: LayoutNewsletterRoute,
