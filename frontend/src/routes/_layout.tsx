@@ -18,7 +18,15 @@ import {
 } from "@/features/mid_term_curves/exportContext"
 import { downloadCsv, downloadXlsx } from "@/features/mid_term_curves/exportFiles"
 import { isLoggedIn } from "@/hooks/useAuth"
+import { readString, writeString } from "@/lib/storage"
 
+const ACTIVE_TAB_STORAGE_KEY = "mid-term-curves-active-tab"
+const CURVE_TABS = ["curve-builder", "compare-curves", "available"]
+
+function readActiveTab() {
+  const saved = readString(window.localStorage, ACTIVE_TAB_STORAGE_KEY)
+  return saved && CURVE_TABS.includes(saved) ? saved : "curve-builder"
+}
 const CompareCurves = lazy(() =>
   import("@/features/mid_term_curves/CompareCurves").then((module) => ({
     default: module.CompareCurves,
@@ -48,8 +56,9 @@ export const Route = createFileRoute("/_layout")({
 
 function Layout() {
   const [fromDate, setFromDate] = useState("2026-01-01")
-  const [toDate, setToDate] = useState("2035-12-31")
+  const [toDate, setToDate] = useState("2050-12-31")
   const [exporter, setExporter] = useState<TabExporter | null>(null)
+  const [activeTab, setActiveTab] = useState(readActiveTab)
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   })
@@ -88,7 +97,14 @@ function Layout() {
         {isCurveBuilderRoute ? (
           <CurveDateRangeContext.Provider value={dateRange}>
            <CurveExportContext.Provider value={setExporter}>
-            <Tabs defaultValue="curve-builder" className="flex min-h-0 flex-1 flex-col gap-0">
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) => {
+                setActiveTab(value)
+                writeString(window.localStorage, ACTIVE_TAB_STORAGE_KEY, value)
+              }}
+              className="flex min-h-0 flex-1 flex-col gap-0"
+            >
               <header className="sticky top-0 z-10 flex shrink-0 flex-wrap items-end justify-between gap-2 border-b px-4 py-2">
                 <div className="flex flex-col items-start gap-2">
                   <h1 className="text-lg font-semibold">Mid-term Curve Builder</h1>

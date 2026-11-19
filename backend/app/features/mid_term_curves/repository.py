@@ -53,12 +53,15 @@ class MidTermCurvesRepository:
                   MAX(CASE WHEN curve_id = 'JKM [EPA]' THEN price END) AS epa_jkm,
                   MAX(CASE WHEN curve_id = 'TTF [EPA]' THEN price END) AS epa_ttf,
                   MAX(CASE WHEN curve_id = 'HH [EPA]' THEN price END) AS epa_hh,
-                  MAX(CASE WHEN curve_id = 'NBP [EPA]' THEN price END) AS epa_nbp
+                  MAX(CASE WHEN curve_id = 'NBP [EPA]' THEN price END) AS epa_nbp,
+                  MAX(CASE WHEN curve_id = 'Brent - Base case [USD nominal]' THEN price END) AS epa_brent_base,
+                  MAX(CASE WHEN curve_id = 'Brent - High case [USD nominal]' THEN price END) AS epa_brent_high,
+                  MAX(CASE WHEN curve_id = 'Brent - Low case [USD nominal]' THEN price END) AS epa_brent_low
               FROM {epa_table}
               GROUP BY start_date
                ),
                curve_values AS (
-              SELECT ice_curves.start_date AS start_date,
+              SELECT COALESCE(ice_curves.start_date, epa_curves.start_date) AS start_date,
                  jkm,
                  ttf,
                  hh,
@@ -67,35 +70,38 @@ class MidTermCurvesRepository:
                  epa_ttf,
                  epa_hh,
                  epa_nbp,
-                 brent * 0.172 AS crude_17_2,
-                 brent * 0.155 AS crude_15_5,
-                 brent * 0.14 AS crude_14,
-                 brent * 0.125 AS crude_12_5,
-                 brent * 0.10 AS crude_10,
+                 epa_brent_base,
+                 epa_brent_high,
+                 epa_brent_low,
+                 epa_brent_base * 0.172 AS crude_17_2,
+                 epa_brent_base * 0.155 AS crude_15_5,
+                 epa_brent_base * 0.14 AS crude_14,
+                 epa_brent_base * 0.125 AS crude_12_5,
+                 epa_brent_base * 0.10 AS crude_10,
                  CAST(NULL AS DOUBLE) AS euro_coalswitching,
-                 brent * 0.067 + 1.96 AS china_central_asia,
-                brent * (CAST(3.15 AS DOUBLE) / CAST(36.6 AS DOUBLE)) AS china_power_of_siberia,
+                 epa_brent_base * 0.067 + 1.96 AS china_central_asia,
+                epa_brent_base * (CAST(3.15 AS DOUBLE) / CAST(36.6 AS DOUBLE)) AS china_power_of_siberia,
                 86000.0 AS spot_chartering_gea,
-                (88.0 * 85000.0 / 3800000.0) + (88.0 * hh * 0.0009 * 1.15) AS us_to_jktc_100,
-                (0.5 * 88.0 * 85000.0 / 3800000.0) + (88.0 * hh * 0.0009 * 1.15) AS us_to_jktc_50,
-                88.0 * hh * 0.0009 * 1.15 AS us_to_jktc_0,
-                (32.0 * 85000.0 / 3800000.0) + (32.0 * hh * 0.0009 * 1.15) AS us_to_nwe_100,
-                (0.5 * 32.0 * 85000.0 / 3800000.0) + (32.0 * hh * 0.0009 * 1.15) AS us_to_nwe_50,
-                32.0 * hh * 0.0009 * 1.15 AS us_to_nwe_0,
-                (40.0 * 85000.0 / 3800000.0) + (40.0 * hh * 0.0009 * 1.15) AS me_to_jktc_100,
-                (0.5 * 40.0 * 85000.0 / 3800000.0) + (40.0 * hh * 0.0009 * 1.15) AS me_to_jktc_50,
-                40.0 * hh * 0.0009 * 1.15 AS me_to_jktc_0,
-                (38.0 * 85000.0 / 3800000.0) + (38.0 * hh * 0.0009 * 1.15) AS me_to_nwe_100,
-                (0.5 * 38.0 * 85000.0 / 3800000.0) + (38.0 * hh * 0.0009 * 1.15) AS me_to_nwe_50,
-                 38.0 * hh * 0.0009 * 1.15 AS me_to_nwe_0
+                (88.0 * 85000.0 / 3800000.0) + (88.0 * epa_hh * 0.0009 * 1.15) AS us_to_jktc_100,
+                (0.5 * 88.0 * 85000.0 / 3800000.0) + (88.0 * epa_hh * 0.0009 * 1.15) AS us_to_jktc_50,
+                88.0 * epa_hh * 0.0009 * 1.15 AS us_to_jktc_0,
+                (32.0 * 85000.0 / 3800000.0) + (32.0 * epa_hh * 0.0009 * 1.15) AS us_to_nwe_100,
+                (0.5 * 32.0 * 85000.0 / 3800000.0) + (32.0 * epa_hh * 0.0009 * 1.15) AS us_to_nwe_50,
+                32.0 * epa_hh * 0.0009 * 1.15 AS us_to_nwe_0,
+                (40.0 * 85000.0 / 3800000.0) + (40.0 * epa_hh * 0.0009 * 1.15) AS me_to_jktc_100,
+                (0.5 * 40.0 * 85000.0 / 3800000.0) + (40.0 * epa_hh * 0.0009 * 1.15) AS me_to_jktc_50,
+                40.0 * epa_hh * 0.0009 * 1.15 AS me_to_jktc_0,
+                (38.0 * 85000.0 / 3800000.0) + (38.0 * epa_hh * 0.0009 * 1.15) AS me_to_nwe_100,
+                (0.5 * 38.0 * 85000.0 / 3800000.0) + (38.0 * epa_hh * 0.0009 * 1.15) AS me_to_nwe_50,
+                 38.0 * epa_hh * 0.0009 * 1.15 AS me_to_nwe_0
              FROM ice_curves
-             LEFT JOIN epa_curves ON epa_curves.start_date = ice_curves.start_date
+             FULL OUTER JOIN epa_curves ON epa_curves.start_date = ice_curves.start_date
              )
             SELECT curve_values.*,
-                   brent * 0.125 AS woodmac_asia_mid_term,
-                   1.15 * hh + us_to_jktc_100 AS us_marginal_des_asia_100,
-                   1.15 * hh + us_to_jktc_50 AS us_marginal_des_asia_50,
-                   1.15 * hh + us_to_jktc_0 AS us_marginal_des_asia_sunk
+                   epa_brent_base * 0.125 AS woodmac_asia_mid_term,
+                   1.15 * epa_hh + us_to_jktc_100 AS us_marginal_des_asia_100,
+                   1.15 * epa_hh + us_to_jktc_50 AS us_marginal_des_asia_50,
+                   1.15 * epa_hh + us_to_jktc_0 AS us_marginal_des_asia_sunk
             FROM curve_values
             ORDER BY start_date
         """

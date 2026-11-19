@@ -33,12 +33,17 @@ const EPA_COLUMNS = [
   { key: "epa_hh", label: "HH [EPA]", formula: "Quarterly EPA US Henry Hub price, repeated for each month." },
   { key: "epa_nbp", label: "NBP [EPA]", formula: "Quarterly EPA UK NBP price, repeated for each month." },
 ] as const
+const EPA_OIL_COLUMNS = [
+  { key: "epa_brent_base", label: "Brent [EPA] Base", formula: "EPA Brent base case, USD nominal." },
+  { key: "epa_brent_high", label: "Brent [EPA] High", formula: "EPA Brent high case, USD nominal." },
+  { key: "epa_brent_low", label: "Brent [EPA] Low", formula: "EPA Brent low case, USD nominal." },
+] as const
 const OIL_SWITCHING_COLUMNS = [
-  { key: "crude_17_2", label: "17.2% Crude", formula: "Brent * 17.2%." },
-  { key: "crude_15_5", label: "15.5% Crude", formula: "Brent * 15.5%." },
-  { key: "crude_14", label: "14% Crude", formula: "Brent * 14%." },
-  { key: "crude_12_5", label: "12.5% Crude", formula: "Brent * 12.5%." },
-  { key: "crude_10", label: "10% Crude", formula: "Brent * 10%." },
+  { key: "crude_17_2", label: "17.2% Crude", formula: "Brent [EPA] Base * 17.2%." },
+  { key: "crude_15_5", label: "15.5% Crude", formula: "Brent [EPA] Base * 15.5%." },
+  { key: "crude_14", label: "14% Crude", formula: "Brent [EPA] Base * 14%." },
+  { key: "crude_12_5", label: "12.5% Crude", formula: "Brent [EPA] Base * 12.5%." },
+  { key: "crude_10", label: "10% Crude", formula: "Brent [EPA] Base * 10%." },
 ] as const
 const CUSTOM_CURVE_COLUMNS = [
   {
@@ -49,32 +54,32 @@ const CUSTOM_CURVE_COLUMNS = [
   {
     key: "china_central_asia",
     label: "China Central Asia",
-    formula: "(6.7% * Brent) + 1.96",
+    formula: "(6.7% * Brent [EPA] Base) + 1.96",
   },
   {
     key: "china_power_of_siberia",
     label: "China Power Of Siberia",
-    formula: "(3.15 / 36.6) * Brent",
+    formula: "(3.15 / 36.6) * Brent [EPA] Base",
   },
   {
     key: "woodmac_asia_mid_term",
     label: "Woodmac Asia Mid-term",
-    formula: "12.5% * Brent",
+    formula: "12.5% * Brent [EPA] Base",
   },
   {
     key: "us_marginal_des_asia_100",
     label: "US Marginal (DES Asia: 100%)",
-    formula: "115% * Ice HH + US -> JKTC (100% contribution)",
+    formula: "115% * HH [EPA] + US -> JKTC (100% contribution)",
   },
   {
     key: "us_marginal_des_asia_50",
     label: "US Marginal (DES Asia: 50%)",
-    formula: "115% * Ice HH + US -> JKTC (50% contribution)",
+    formula: "115% * HH [EPA] + US -> JKTC (50% contribution)",
   },
   {
     key: "us_marginal_des_asia_sunk",
     label: "US Marginal (DES Asia: Sunk)",
-    formula: "115% * Ice HH + US -> JKTC (0% contribution)",
+    formula: "115% * HH [EPA] + US -> JKTC (0% contribution)",
   },
 ] as const
 const ALL_SHIPPING_COLUMNS = [
@@ -87,62 +92,62 @@ const ALL_SHIPPING_COLUMNS = [
   {
     key: "us_to_jktc_100",
     label: "US -> JKTC (100% contribution)",
-    formula: "(88 * $85,000 / 3,800,000) + (88 * Ice HH * 0.09% * 1.15)",
+    formula: "(88 * $85,000 / 3,800,000) + (88 * HH [EPA] * 0.09% * 1.15)",
   },
   {
     key: "us_to_jktc_50",
     label: "US -> JKTC (50% contribution)",
-    formula: "50% * (88 * $85,000 / 3,800,000) + (88 * Ice HH * 0.09% * 1.15)",
+    formula: "50% * (88 * $85,000 / 3,800,000) + (88 * HH [EPA] * 0.09% * 1.15)",
   },
   {
     key: "us_to_jktc_0",
     label: "US -> JKTC (0% contribution)",
-    formula: "88 * Ice HH * 0.09% * 1.15",
+    formula: "88 * HH [EPA] * 0.09% * 1.15",
   },
   {
     key: "us_to_nwe_100",
     label: "US -> NWE (100% contribution)",
-    formula: "(32 * $85,000 / 3,800,000) + (32 * Ice HH * 0.09% * 1.15)",
+    formula: "(32 * $85,000 / 3,800,000) + (32 * HH [EPA] * 0.09% * 1.15)",
   },
   {
     key: "us_to_nwe_50",
     label: "US -> NWE (50% contribution)",
-    formula: "50% * (32 * $85,000 / 3,800,000) + (32 * Ice HH * 0.09% * 1.15)",
+    formula: "50% * (32 * $85,000 / 3,800,000) + (32 * HH [EPA] * 0.09% * 1.15)",
   },
   {
     key: "us_to_nwe_0",
     label: "US -> NWE (0% contribution)",
-    formula: "32 * Ice HH * 0.09% * 1.15",
+    formula: "32 * HH [EPA] * 0.09% * 1.15",
   },
   {
     key: "me_to_jktc_100",
     label: "ME -> JKTC (100% contribution)",
-    formula: "(40 * $85,000 / 3,800,000) + (40 * Ice HH * 0.09% * 1.15)",
+    formula: "(40 * $85,000 / 3,800,000) + (40 * HH [EPA] * 0.09% * 1.15)",
   },
   {
     key: "me_to_jktc_50",
     label: "ME -> JKTC (50% contribution)",
-    formula: "50% * (40 * $85,000 / 3,800,000) + (40 * Ice HH * 0.09% * 1.15)",
+    formula: "50% * (40 * $85,000 / 3,800,000) + (40 * HH [EPA] * 0.09% * 1.15)",
   },
   {
     key: "me_to_jktc_0",
     label: "ME -> JKTC (0% contribution)",
-    formula: "40 * Ice HH * 0.09% * 1.15",
+    formula: "40 * HH [EPA] * 0.09% * 1.15",
   },
   {
     key: "me_to_nwe_100",
     label: "ME -> NWE (100% contribution)",
-    formula: "(38 * $85,000 / 3,800,000) + (38 * Ice HH * 0.09% * 1.15)",
+    formula: "(38 * $85,000 / 3,800,000) + (38 * HH [EPA] * 0.09% * 1.15)",
   },
   {
     key: "me_to_nwe_50",
     label: "ME -> NWE (50% contribution)",
-    formula: "50% * (38 * $85,000 / 3,800,000) + (38 * Ice HH * 0.09% * 1.15)",
+    formula: "50% * (38 * $85,000 / 3,800,000) + (38 * HH [EPA] * 0.09% * 1.15)",
   },
   {
     key: "me_to_nwe_0",
     label: "ME -> NWE (0% contribution)",
-    formula: "38 * Ice HH * 0.09% * 1.15",
+    formula: "38 * HH [EPA] * 0.09% * 1.15",
   },
 ] as const
 const CHARTERING_COLUMNS = ALL_SHIPPING_COLUMNS.slice(0, 1)
@@ -204,11 +209,21 @@ export const CURVE_SECTIONS: {
   },
   {
     id: "epa",
-    label: "EPA curves",
+    label: "EPA gas curves",
     curves: EPA_COLUMNS.map((column, index) => ({
       id: column.key,
       label: column.label,
       color: ["#005b8f", "#00a3e0", "#e4002b", "#ffb81c"][index],
+      value: (row) => row[column.key],
+    })),
+  },
+  {
+    id: "epa-oil",
+    label: "EPA oil curves",
+    curves: EPA_OIL_COLUMNS.map((column, index) => ({
+      id: column.key,
+      label: column.label,
+      color: ["#005b8f", "#e4002b", "#00a3e0"][index],
       value: (row) => row[column.key],
     })),
   },
@@ -285,6 +300,7 @@ const CURRENCY_FORMAT = new Intl.NumberFormat(undefined, {
 const GROUP_COLOR = {
   ice: "bg-sky-100 text-sky-950 dark:bg-sky-950 dark:text-sky-100",
   epa: "bg-blue-100 text-blue-950 dark:bg-blue-950 dark:text-blue-100",
+  epaOil: "bg-indigo-100 text-indigo-950 dark:bg-indigo-950 dark:text-indigo-100",
   oil: "bg-rose-100 text-rose-950 dark:bg-rose-950 dark:text-rose-100",
   chartering: "bg-cyan-100 text-cyan-950 dark:bg-cyan-950 dark:text-cyan-100",
   freight: "bg-blue-100 text-blue-950 dark:bg-blue-950 dark:text-blue-100",
@@ -317,7 +333,7 @@ function CurveBuilder() {
 
   useRegisterExport(() => {
     if (!filteredPrices) return null
-    const order = ["ice", "epa", "oil-switching", "custom", "arbitrage", "chartering", "freight"]
+    const order = ["ice", "epa", "epa-oil", "oil-switching", "custom", "arbitrage", "chartering", "freight"]
     const curves = order.flatMap((id) => {
       const section = CURVE_SECTIONS.find((item) => item.id === id)
       return (section?.curves ?? []).map((curve) => ({
@@ -390,7 +406,13 @@ function CurveBuilder() {
                 colSpan={EPA_COLUMNS.length}
                 className={`h-7 border-r border-border px-2 py-1 text-center text-[11px] normal-case tracking-normal ${GROUP_COLOR.epa}`}
               >
-                EPA curves
+                EPA gas curves
+              </TableHead>
+              <TableHead
+                colSpan={EPA_OIL_COLUMNS.length}
+                className={`h-7 border-r border-border px-2 py-1 text-center text-[11px] normal-case tracking-normal ${GROUP_COLOR.epaOil}`}
+              >
+                EPA oil curves
               </TableHead>
               <TableHead
                 colSpan={OIL_SWITCHING_COLUMNS.length}
@@ -438,6 +460,15 @@ function CurveBuilder() {
                   key={column.key}
                   title={column.formula}
                   className={`h-12 min-w-[68px] whitespace-normal px-1 py-1 text-center text-[10px] leading-tight normal-case tracking-normal ${GROUP_COLOR.epa} ${column.key === "epa_nbp" ? "border-r border-border" : ""}`}
+                >
+                  {column.label}
+                </TableHead>
+              ))}
+              {EPA_OIL_COLUMNS.map((column) => (
+                <TableHead
+                  key={column.key}
+                  title={column.formula}
+                  className={`h-12 min-w-[68px] whitespace-normal px-1 py-1 text-center text-[10px] leading-tight normal-case tracking-normal ${GROUP_COLOR.epaOil} ${column.key === "epa_brent_low" ? "border-r border-border" : ""}`}
                 >
                   {column.label}
                 </TableHead>
@@ -523,6 +554,18 @@ function CurveBuilder() {
                       key={column.key}
                       title={column.formula}
                       className={`px-2 py-1 text-right text-xs leading-4 tabular-nums ${column.key === "epa_nbp" ? "border-r border-border" : ""}`}
+                    >
+                      {typeof value === "number" ? PRICE_FORMAT.format(value) : "--"}
+                    </TableCell>
+                  )
+                })}
+                {EPA_OIL_COLUMNS.map((column) => {
+                  const value = row[column.key]
+                  return (
+                    <TableCell
+                      key={column.key}
+                      title={column.formula}
+                      className={`px-2 py-1 text-right text-xs leading-4 tabular-nums ${column.key === "epa_brent_low" ? "border-r border-border" : ""}`}
                     >
                       {typeof value === "number" ? PRICE_FORMAT.format(value) : "--"}
                     </TableCell>

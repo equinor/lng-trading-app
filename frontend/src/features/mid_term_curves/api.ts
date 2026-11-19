@@ -10,6 +10,9 @@ export type CurvePrices = {
   epa_ttf: number | null
   epa_hh: number | null
   epa_nbp: number | null
+  epa_brent_base: number | null
+  epa_brent_high: number | null
+  epa_brent_low: number | null
   crude_17_2: number | null
   crude_15_5: number | null
   crude_14: number | null

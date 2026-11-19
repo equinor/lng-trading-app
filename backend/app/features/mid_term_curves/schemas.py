@@ -15,6 +15,9 @@ class CurvePrices(BaseModel):
     epa_ttf: float | None
     epa_hh: float | None
     epa_nbp: float | None
+    epa_brent_base: float | None
+    epa_brent_high: float | None
+    epa_brent_low: float | None
     crude_17_2: float | None
     crude_15_5: float | None
     crude_14: float | None

@@ -28,6 +28,13 @@ import {
 import { useCurveDateRange } from "@/features/mid_term_curves/dateRange"
 import { useRegisterExport } from "@/features/mid_term_curves/exportContext"
 import { CURVE_SECTIONS } from "@/routes/_layout/index"
+import { readString, removeKey, writeString } from "@/lib/storage"
+
+const SELECTED_CURVE_STORAGE_KEY = "mid-term-curves-builder-selected-curve"
+
+function readSelectedCurveId(): string | null {
+  return readString(window.localStorage, SELECTED_CURVE_STORAGE_KEY)
+}
 
 const PRICE_FORMAT = new Intl.NumberFormat(undefined, {
   minimumFractionDigits: 2,
@@ -70,7 +77,7 @@ export function CurveBuilder() {
   })
   const prices = pricesQuery.data ?? []
   const savedRows = savedQuery.data ?? []
-  const [selectedCurveId, setSelectedCurveId] = useState<string | null>(null)
+  const [selectedCurveId, setSelectedCurveId] = useState<string | null>(readSelectedCurveId)
   const [curveName, setCurveName] = useState("")
   const [lastSaveWasDuplicate, setLastSaveWasDuplicate] = useState(false)
   const [draftMonths, setDraftMonths] = useState<DraftMonth[]>([])
@@ -99,6 +106,15 @@ export function CurveBuilder() {
     }))
   }, [savedRows])
   const activeCurve = curveRows.find((curve) => curve.id === selectedCurveId)
+
+  useEffect(() => {
+    if (selectedCurveId) writeString(window.localStorage, SELECTED_CURVE_STORAGE_KEY, selectedCurveId)
+    else removeKey(window.localStorage, SELECTED_CURVE_STORAGE_KEY)
+  }, [selectedCurveId])
+
+  useEffect(() => {
+    if (savedQuery.isSuccess && selectedCurveId && !activeCurve) setSelectedCurveId(null)
+  }, [savedQuery.isSuccess, selectedCurveId, activeCurve])
   const visibleMonths = draftMonths.filter(
     (month) => month.month >= fromDate && month.month <= toDate,
   )
@@ -118,7 +134,7 @@ export function CurveBuilder() {
       ? selectedValues.reduce((sum, value) => sum + value, 0) / selectedValues.length
       : null
     const brentPercent =
-      average !== null && source?.brent ? (average / source.brent) * 100 : null
+      average !== null && source?.epa_brent_base ? (average / source.epa_brent_base) * 100 : null
     return { source, average, brentPercent }
   }
 

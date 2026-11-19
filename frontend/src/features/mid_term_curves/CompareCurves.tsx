@@ -13,9 +13,16 @@ import {
 
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ChevronDown, RotateCcw } from "lucide-react"
+import { RotateCcw } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   getMidTermCurvePrices,
   getSavedCustomCurves,
@@ -32,28 +39,61 @@ const SELECTION_STORAGE_KEY = "mid-term-curves-compare-selection"
 const CUSTOM_SELECTION_STORAGE_KEY = "mid-term-curves-compare-custom-selection"
 const COLORS_STORAGE_KEY = "mid-term-curves-compare-colors"
 const CHART_OPTIONS_STORAGE_KEY = "mid-term-curves-compare-options"
-const PALETTE_OPEN_STORAGE_KEY = "mid-term-curves-compare-palette-open"
 const CUSTOM_CURVE_DEFAULT_COLOR = "#ff1243"
-const DEFAULT_CURVE_IDS = ["ice_jkm", "ice_ttf", "ice_hh", "crude_17_2"]
+const DEFAULT_CURVE_IDS = [
+  "epa_jkm",
+  "epa_ttf",
+  "epa_hh",
+  "us_marginal_des_asia_100",
+  "us_marginal_des_asia_50",
+  "us_marginal_des_asia_sunk",
+]
+const DEFAULT_CURVE_COLORS: Record<string, string> = {
+  crude_17_2: "#000000",
+  crude_15_5: "#666666",
+  crude_14: "#888888",
+  crude_12_5: "#aaaaaa",
+  crude_10: "#cccccc",
+  ice_jkm: "#007f63",
+  ice_hh: "#f79b18",
+  ice_ttf: "#36b37e",
+  ice_brent: "#000000",
+  epa_jkm: "#ff1243",
+  epa_ttf: "#ffc2cc",
+  epa_nbp: "#ffd34d",
+  epa_hh: "#ffb81c",
+  us_to_jktc_100: "#369fd0",
+  us_to_jktc_50: "#369fd0",
+  us_to_jktc_0: "#369fd0",
+  us_to_nwe_100: "#369fd0",
+  us_to_nwe_50: "#369fd0",
+  us_to_nwe_0: "#369fd0",
+  me_to_jktc_100: "#369fd0",
+  me_to_jktc_50: "#369fd0",
+  me_to_jktc_0: "#369fd0",
+  me_to_nwe_100: "#369fd0",
+  me_to_nwe_50: "#369fd0",
+  me_to_nwe_0: "#369fd0",
+  spot_chartering_gea: "#36b37e",
+  spark_0: "#36b37e",
+  spark_1: "#36b37e",
+  arbitrage_0: "#ffd34d",
+  arbitrage_1: "#ffd34d",
+  arbitrage_2: "#ffd34d",
+  euro_coalswitching: "#7b61a8",
+  china_central_asia: "#7b61a8",
+  china_power_of_siberia: "#7b61a8",
+  woodmac_asia_mid_term: "#7b61a8",
+  us_marginal_des_asia_100: "#fff4cc",
+  us_marginal_des_asia_50: "#ffe69a",
+  us_marginal_des_asia_sunk: "#ffd34d",
+}
 const AVAILABLE_CURVE_IDS = new Set(
   CURVE_SECTIONS.flatMap((section) => section.curves.map((curve) => curve.id)),
 )
 const COLOR_PALETTE = [
   {
-    label: "Primary colours",
-    colors: [
-      { name: "Equinor red", value: "#ff1243" },
-      { name: "Light blue", value: "#ddf4f8" },
-      { name: "Light green", value: "#e4f6e8" },
-      { name: "Light peach", value: "#ffeadb" },
-      { name: "Navy", value: "#243746" },
-      { name: "Teal", value: "#007079" },
-      { name: "Burgundy", value: "#810024" },
-      { name: "Purple", value: "#7b61a8" },
-    ],
-  },
-  {
-    label: "Other colours",
+    label: "Colours",
     colors: [
       { name: "Black", value: "#000000" },
       { name: "Charcoal", value: "#252525" },
@@ -95,6 +135,14 @@ const COLOR_PALETTE = [
       { name: "Light green", value: "#6fcf97" },
       { name: "Pale green", value: "#a5e2bb" },
       { name: "Mint", value: "#d7f2e0" },
+      { name: "Deep purple", value: "#2e1a47" },
+      { name: "Dark purple", value: "#4a2c7a" },
+      { name: "Purple", value: "#6b3fa0" },
+      { name: "Medium purple", value: "#7b61a8" },
+      { name: "Violet", value: "#9b72cf" },
+      { name: "Light purple", value: "#b79ae0" },
+      { name: "Lavender", value: "#d4c3ee" },
+      { name: "Pale lavender", value: "#ece4f7" },
     ],
   },
 ]
@@ -103,12 +151,25 @@ type CompareChartOptions = {
   showTodayLine: boolean
   showYearStartLines: boolean
   shadeMode: "off" | "history" | "forward"
+  yMin: string
+  yMax: string
+  yStep: string
 }
 
 const DEFAULT_CHART_OPTIONS: CompareChartOptions = {
   showTodayLine: true,
   showYearStartLines: true,
   shadeMode: "history",
+  yMin: "",
+  yMax: "",
+  yStep: "",
+}
+
+// Blank or non-numeric input means automatic.
+function parseAxisNumber(value: string): number | null {
+  if (value.trim() === "") return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function readCurveSelection(): Set<string> {
@@ -134,26 +195,20 @@ function readCustomCurveSelection(): Set<string> {
   }
 }
 
-function readPaletteOpen(): boolean {
-  if (typeof window === "undefined") return true
-  try {
-    return readJson<boolean>(window.localStorage, PALETTE_OPEN_STORAGE_KEY) !== false
-  } catch {
-    return true
-  }
-}
-
 function readCurveColors(): Record<string, string> {
-  if (typeof window === "undefined") return {}
+  if (typeof window === "undefined") return DEFAULT_CURVE_COLORS
   try {
     const saved = readJson<Record<string, string>>(window.localStorage, COLORS_STORAGE_KEY)
-    if (!saved) return {}
+    if (!saved) return DEFAULT_CURVE_COLORS
     // Saved custom curves are keyed by their own ids, so only the colour is validated.
-    return Object.fromEntries(
-      Object.entries(saved).filter(([, color]) => /^#[\da-f]{6}$/i.test(color)),
-    )
+    return {
+      ...DEFAULT_CURVE_COLORS,
+      ...Object.fromEntries(
+        Object.entries(saved).filter(([, color]) => /^#[\da-f]{6}$/i.test(color)),
+      ),
+    }
   } catch {
-    return {}
+    return DEFAULT_CURVE_COLORS
   }
 }
 
@@ -173,6 +228,9 @@ function readChartOptions(): CompareChartOptions {
         saved.shadeMode === "off" || saved.shadeMode === "forward"
           ? saved.shadeMode
           : "history",
+      yMin: typeof saved.yMin === "string" ? saved.yMin : "",
+      yMax: typeof saved.yMax === "string" ? saved.yMax : "",
+      yStep: typeof saved.yStep === "string" ? saved.yStep : "",
     }
   } catch {
     return DEFAULT_CHART_OPTIONS
@@ -187,6 +245,46 @@ const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
 
 function formatMonth(value: number) {
   return DATE_FORMAT.format(new Date(value))
+}
+
+const PALETTE_COLORS = COLOR_PALETTE.flatMap((section) => section.colors)
+
+function CurveColorPicker({
+  label,
+  color,
+  onChange,
+}: {
+  label: string
+  color: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Color for ${label}`}
+          title={`Set ${label} line color`}
+          className="size-4 shrink-0 cursor-pointer rounded-sm border border-border"
+          style={{ backgroundColor: color }}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-auto p-2">
+        <div className="grid grid-cols-8 gap-1">
+          {PALETTE_COLORS.map((swatch) => (
+            <DropdownMenuItem
+              key={swatch.value}
+              aria-label={swatch.name}
+              title={swatch.name}
+              onSelect={() => onChange(swatch.value)}
+              className="size-5 min-h-0 rounded-sm border border-border p-0 data-[highlighted]:ring-2 data-[highlighted]:ring-ring"
+              style={{ backgroundColor: swatch.value }}
+            />
+          ))}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 export function CompareCurves() {
@@ -205,9 +303,8 @@ export function CompareCurves() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(readCurveSelection)
   const [selectedCustomIds, setSelectedCustomIds] = useState<Set<string>>(readCustomCurveSelection)
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>(readCurveColors)
-  const [paletteOpen, setPaletteOpen] = useState(readPaletteOpen)
   const [chartOptions, setChartOptions] = useState<CompareChartOptions>(readChartOptions)
-  const { showTodayLine, showYearStartLines, shadeMode } = chartOptions
+  const { showTodayLine, showYearStartLines, shadeMode, yMin, yMax, yStep } = chartOptions
   const { fromDate, toDate } = useCurveDateRange()
 
   useEffect(() => {
@@ -233,14 +330,6 @@ export function CompareCurves() {
       // Storage is best-effort; current curve colors remain usable in memory.
     }
   }, [colorOverrides])
-
-  useEffect(() => {
-    try {
-      writeJson(window.localStorage, PALETTE_OPEN_STORAGE_KEY, paletteOpen)
-    } catch {
-      // Storage is best-effort; the palette state remains usable in memory.
-    }
-  }, [paletteOpen])
 
   useEffect(() => {
     try {
@@ -331,6 +420,46 @@ export function CompareCurves() {
     }
     return point
   })
+  const yMinValue = parseAxisNumber(yMin)
+  const yMaxValue = parseAxisNumber(yMax)
+  const yStepValue = parseAxisNumber(yStep)
+  const validYLimits =
+    yMinValue === null || yMaxValue === null || yMinValue < yMaxValue
+  const dataValues = chartData.flatMap((point) =>
+    plottedCurves.map((curve) => point[curve.id]).filter((v): v is number => typeof v === "number"),
+  )
+  const dataMin = dataValues.length ? Math.min(...dataValues) : 0
+  const dataMax = dataValues.length ? Math.max(...dataValues) : 0
+  const axisLow =
+    validYLimits && yMinValue !== null
+      ? yMinValue
+      : yStepValue && yStepValue > 0
+        ? Math.floor(dataMin / yStepValue) * yStepValue
+        : null
+  const axisHigh =
+    validYLimits && yMaxValue !== null
+      ? yMaxValue
+      : yStepValue && yStepValue > 0
+        ? Math.ceil(dataMax / yStepValue) * yStepValue
+        : null
+  const tickCount =
+    yStepValue && yStepValue > 0 && axisLow !== null && axisHigh !== null
+      ? Math.floor((axisHigh - axisLow) / yStepValue + 1e-9) + 1
+      : 0
+  const yTicks =
+    tickCount > 1 && tickCount <= 200 && yStepValue && axisLow !== null
+      ? Array.from({ length: tickCount }, (_, index) =>
+          Number((axisLow + index * yStepValue).toFixed(6)),
+        )
+      : undefined
+  const yDomain: [number | "auto", number | "auto"] = [
+    validYLimits && yMinValue !== null ? yMinValue : yTicks ? yTicks[0] : "auto",
+    validYLimits && yMaxValue !== null
+      ? yMaxValue
+      : yTicks
+        ? Math.max(yTicks[yTicks.length - 1], dataMax)
+        : "auto",
+  ]
 
   useRegisterExport(() => ({
     fileName: `compare_curves_${fromDate}_${toDate}`,
@@ -384,71 +513,28 @@ export function CompareCurves() {
     })
   }
 
-  const resetComparison = () => {
+  const resetCurves = () => {
     setSelectedIds(new Set(DEFAULT_CURVE_IDS))
     setSelectedCustomIds(new Set())
-    setColorOverrides({})
-    setChartOptions(DEFAULT_CHART_OPTIONS)
+    setColorOverrides(DEFAULT_CURVE_COLORS)
   }
 
-  const applyPaletteColor = (color: string) => {
-    setColorOverrides((current) => {
-      const next = { ...current }
-      for (const id of [...selectedIds, ...selectedCustomIds]) {
-        next[id] = color
-      }
-      return next
-    })
-  }
+  const resetGraph = () => setChartOptions(DEFAULT_CHART_OPTIONS)
 
   return (
     <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
       <aside className="flex min-h-0 flex-col border-b pb-3 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-3">
-        <div className="mb-2 shrink-0 space-y-0.5 border-b border-border pb-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold">Color palette</h2>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="size-6"
-              aria-label={paletteOpen ? "Collapse color palette" : "Expand color palette"}
-              aria-expanded={paletteOpen}
-              aria-controls="curve-color-palette"
-              title={paletteOpen ? "Collapse color palette" : "Expand color palette"}
-              onClick={() => setPaletteOpen((open) => !open)}
-            >
-              <ChevronDown
-                aria-hidden="true"
-                className={`transition-transform ${paletteOpen ? "" : "-rotate-90"}`}
-              />
-            </Button>
-          </div>
-          {paletteOpen && (
-            <div id="curve-color-palette" className="space-y-0.5">
-              {COLOR_PALETTE.map((section) => (
-                <div key={section.label} role="group" aria-label={section.label}>
-                  <p className="mb-0.5 text-[10px] leading-4 text-muted-foreground">
-                    {section.label}
-                  </p>
-                  <div className="grid grid-cols-8 gap-x-1 gap-y-0.5">
-                    {section.colors.map((color) => (
-                      <button
-                        key={color.value}
-                        type="button"
-                        aria-label={`Apply ${color.name} to selected curves`}
-                        title={`${color.name}${selectedIds.size + selectedCustomIds.size ? " · Apply to selected curves" : " · Select a curve first"}`}
-                        disabled={selectedIds.size + selectedCustomIds.size === 0}
-                        onClick={() => applyPaletteColor(color.value)}
-                        className="size-5 rounded-sm border border-border transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-45"
-                        style={{ backgroundColor: color.value }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="mb-2 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={resetCurves}
+            title="Restore the default curve selection and colors"
+          >
+            <RotateCcw aria-hidden="true" />
+            Reset curves
+          </Button>
         </div>
         <div
           role="group"
@@ -493,28 +579,13 @@ export function CompareCurves() {
                   }
                 />
                 <span className="min-w-0 flex-1 leading-tight">{curve.label}</span>
-                <label
-                  className="relative size-4 shrink-0 cursor-pointer rounded-sm"
-                  title={`Set ${curve.label} line color`}
-                >
-                  <input
-                    aria-label={`Color for custom curve ${curve.label}`}
-                    type="color"
-                    value={curve.color}
-                    className="absolute inset-0 z-10 size-full cursor-pointer opacity-0"
-                    onChange={(event) =>
-                      setColorOverrides((current) => ({
-                        ...current,
-                        [curve.id]: event.target.value,
-                      }))
-                    }
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-0 rounded-sm border border-border"
-                    style={{ backgroundColor: curve.color }}
-                  />
-                </label>
+                <CurveColorPicker
+                  label={curve.label}
+                  color={curve.color}
+                  onChange={(value) =>
+                    setColorOverrides((current) => ({ ...current, [curve.id]: value }))
+                  }
+                />
               </div>
             ))
           )}
@@ -574,28 +645,13 @@ export function CompareCurves() {
                       <span className="min-w-0 flex-1 leading-tight">
                         {curve.label}
                       </span>
-                      <label
-                        className="relative size-4 shrink-0 cursor-pointer rounded-sm"
-                        title={`Set ${curve.label} line color`}
-                      >
-                        <input
-                          aria-label={`Color for ${curve.label}`}
-                          type="color"
-                          value={color}
-                          className="absolute inset-0 z-10 size-full cursor-pointer opacity-0"
-                          onChange={(event) =>
-                            setColorOverrides((current) => ({
-                              ...current,
-                              [curve.id]: event.target.value,
-                            }))
-                          }
-                        />
-                        <span
-                          aria-hidden="true"
-                          className="absolute inset-0 rounded-sm border border-border"
-                          style={{ backgroundColor: color }}
-                        />
-                      </label>
+                      <CurveColorPicker
+                        label={curve.label}
+                        color={color}
+                        onChange={(value) =>
+                          setColorOverrides((current) => ({ ...current, [curve.id]: value }))
+                        }
+                      />
                     </div>
                   )
                 })}
@@ -606,24 +662,46 @@ export function CompareCurves() {
       </aside>
 
       <section className="flex min-h-0 min-w-0 flex-col" aria-label="Curve comparison chart">
-        <div className="mb-3 flex shrink-0 flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold">Curve comparison</h2>
-            <p className="text-xs text-muted-foreground">
-              {plottedCurves.length} curves plotted across {filteredRows.length} dates
-            </p>
-          </div>
+        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={resetComparison}
-              title="Reset colors, curve selections, markers, and shading"
+              onClick={resetGraph}
+              title="Restore the default Y axis, Today, Years, and shading"
             >
               <RotateCcw aria-hidden="true" />
-              Reset
+              Reset graph
             </Button>
+            {(
+              [
+                { key: "yMin", label: "Y min", value: yMin },
+                { key: "yMax", label: "Y max", value: yMax },
+                { key: "yStep", label: "Y step", value: yStep },
+              ] as const
+            ).map((field) => (
+              <label key={field.key} className="flex items-center gap-1.5 text-xs">
+                <span>{field.label}</span>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min={field.key === "yStep" ? 0 : undefined}
+                  placeholder="Auto"
+                  value={field.value}
+                  onChange={(event) =>
+                    setChartOptions((current) => ({
+                      ...current,
+                      [field.key]: event.target.value,
+                    }))
+                  }
+                  className="h-8 w-20 px-2 text-xs"
+                />
+              </label>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
             <label className="flex cursor-pointer items-center gap-2 text-xs">
               <Checkbox
                 checked={showTodayLine}
@@ -721,9 +799,18 @@ export function CompareCurves() {
                   minTickGap={28}
                 />
                 <YAxis
+                  domain={yDomain}
+                  ticks={yTicks}
+                  allowDataOverflow={validYLimits && (yMinValue !== null || yMaxValue !== null)}
                   tick={{ fill: "currentColor", fontSize: 11 }}
                   tickFormatter={(value: number) => value.toFixed(2)}
-                  width={64}
+                  width={80}
+                  label={{
+                    value: "USD / mmbtu",
+                    angle: -90,
+                    position: "insideLeft",
+                    style: { textAnchor: "middle", fill: "currentColor", fontSize: 12 },
+                  }}
                 />
                 <Tooltip
                   labelFormatter={(value) =>
