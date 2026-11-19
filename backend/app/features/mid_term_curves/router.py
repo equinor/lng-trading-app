@@ -14,9 +14,14 @@ from app.features.mid_term_curves.schemas import (
 router = APIRouter(dependencies=[Depends(require_reader)])
 
 
+def _author(user: dict) -> str:
+    return user.get("name") or user.get("email") or "Unknown"
+
+
 @router.get("/prices", response_model=list[CurvePrices])
-def get_prices(service: MidTermCurvesServiceDep):
-    return service.list_prices()
+def get_prices(service: MidTermCurvesServiceDep, refresh: bool = False):
+    """Every curve for every month. `refresh` skips the server cache and reloads the source prices."""
+    return service.list_prices(refresh)
 
 
 @router.get("/custom-curves", response_model=list[SavedCustomCurveMonth])
@@ -38,7 +43,7 @@ def create_custom_curve(
         None,
         body.curve_name,
         body.months,
-        user.get("name") or user.get("email") or "Unknown",
+        _author(user),
     )
     return {"curve_id": curve_id}
 
@@ -54,7 +59,7 @@ def update_custom_curve(
         curve_id,
         body.curve_name,
         body.months,
-        user.get("name") or user.get("email") or "Unknown",
+        _author(user),
     )
     return {"curve_id": saved_id}
 

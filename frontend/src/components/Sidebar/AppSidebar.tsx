@@ -1,5 +1,6 @@
 import {
   ChartSpline,
+  Home,
   ListCollapse,
   Newspaper,
   ScrollText,
@@ -23,6 +24,8 @@ import { type Item, Main } from "./Main"
 import { User } from "./User"
 
 const baseItems: Item[] = [
+  { icon: Home, tone: "neutral", title: "Dashboard", path: "/" },
+  { type: "separator", key: "dashboard-news-divider" },
   { icon: Newspaper, tone: "neutral", title: "Newsletter", path: "/newsletter" },
   { icon: ScrollText, tone: "neutral", title: "News Summary", path: "/news_summary" },
   {
@@ -34,7 +37,7 @@ const baseItems: Item[] = [
   { type: "separator", key: "news-pipeline-divider" },
   { icon: Waypoints, tone: "emerald", title: "Pipeline Nominations", path: "/pipeline_nominations" },
   { type: "separator", key: "pipeline-curve-builder-divider" },
-  { icon: ChartSpline, tone: "rose", title: "Mid-term Curve Builder", path: "/" },
+  { icon: ChartSpline, tone: "rose", title: "Mid-term Curve Builder", path: "/mid_term_curves" },
 ]
 
 export function AppSidebar() {

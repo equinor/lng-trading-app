@@ -1,8 +1,12 @@
-import type { ExportCell, ExportTable } from "@/features/mid_term_curves/exportContext"
+import type {
+  ExportCell,
+  ExportTable,
+} from "@/features/mid_term_curves/hooks/useCurveExport"
 
 function csvCell(value: ExportCell): string {
   if (value === null) return ""
-  if (typeof value === "number") return Number.isFinite(value) ? String(value) : ""
+  if (typeof value === "number")
+    return Number.isFinite(value) ? String(value) : ""
   // A leading apostrophe stops spreadsheet apps from running user text as a formula.
   const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text

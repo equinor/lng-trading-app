@@ -1,5 +1,7 @@
 import { apiRequest } from "@/services/api_client"
 
+const BASE = "/api/v1/mid-term-curves"
+
 export type CurvePrices = {
   start_date: string
   jkm: number | null
@@ -60,18 +62,22 @@ export type SaveCustomCurveBody = {
   months: CustomCurveMonth[]
 }
 
-export function getMidTermCurvePrices(): Promise<CurvePrices[]> {
-  return apiRequest<CurvePrices[]>("/api/v1/curve-builder/prices")
+export type SaveCustomCurveResponse = { curve_id: string }
+
+export function getMidTermCurvePrices(refresh = false): Promise<CurvePrices[]> {
+  return apiRequest<CurvePrices[]>(`${BASE}/prices`, {
+    query: refresh ? { refresh: "true" } : {},
+  })
 }
 
 export function getSavedCustomCurves(): Promise<SavedCustomCurveMonth[]> {
-  return apiRequest<SavedCustomCurveMonth[]>("/api/v1/curve-builder/custom-curves")
+  return apiRequest<SavedCustomCurveMonth[]>(`${BASE}/custom-curves`)
 }
 
 export function createCustomCurve(
   body: SaveCustomCurveBody,
-): Promise<{ curve_id: string }> {
-  return apiRequest<{ curve_id: string }>("/api/v1/curve-builder/custom-curves", {
+): Promise<SaveCustomCurveResponse> {
+  return apiRequest<SaveCustomCurveResponse>(`${BASE}/custom-curves`, {
     method: "POST",
     body,
   })
@@ -80,16 +86,18 @@ export function createCustomCurve(
 export function updateCustomCurve(
   curveId: string,
   body: SaveCustomCurveBody,
-): Promise<{ curve_id: string }> {
-  return apiRequest<{ curve_id: string }>(
-    `/api/v1/curve-builder/custom-curves/${encodeURIComponent(curveId)}`,
+): Promise<SaveCustomCurveResponse> {
+  return apiRequest<SaveCustomCurveResponse>(
+    `${BASE}/custom-curves/${encodeURIComponent(curveId)}`,
     { method: "PATCH", body },
   )
 }
 
 export function deleteCustomCurve(curveId: string): Promise<void> {
   return apiRequest<void>(
-    `/api/v1/curve-builder/custom-curves/${encodeURIComponent(curveId)}`,
-    { method: "DELETE" },
+    `${BASE}/custom-curves/${encodeURIComponent(curveId)}`,
+    {
+      method: "DELETE",
+    },
   )
 }

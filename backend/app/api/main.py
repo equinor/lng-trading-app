@@ -19,8 +19,8 @@ api_router.include_router(
 )
 api_router.include_router(
     mid_term_curves_router,
-    prefix="/curve-builder",
-    tags=["curve-builder"],
+    prefix="/mid-term-curves",
+    tags=["mid-term-curves"],
 )
 api_router.include_router(utils.router, prefix="/utils", tags=["utils"])
 # api_router.include_router(items.router)
