@@ -106,6 +106,21 @@ class Settings(BaseSettings):
         "ms_vulcan_gplng_plab.prices_silver.mid_term_curve_builder_custom"
     )
 
+    # LNG balance model: daily supply by loading country and demand by destination country
+    LNG_BALANCE_SUPPLY_TABLE: str = (
+        "ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply_latest"
+    )
+    LNG_BALANCE_DEMAND_TABLE: str = (
+        "ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand_latest"
+    )
+    # The same tables with a snapshot for every `forecast_date`, used to compare older forecasts.
+    LNG_BALANCE_SUPPLY_HISTORY_TABLE: str = (
+        "ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply"
+    )
+    LNG_BALANCE_DEMAND_HISTORY_TABLE: str = (
+        "ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand"
+    )
+
     SENTRY_DSN: str | None = None
 
     # --- Equinor Atlas Email ---

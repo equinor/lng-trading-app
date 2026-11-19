@@ -31,7 +31,13 @@ function spread(ys: number[], top: number, bottom: number): number[] {
 }
 
 /** The value at the tail end of each line. Must be a child of a Recharts chart. */
-export function EndLabels({ labels }: { labels: EndLabel[] }) {
+export function EndLabels({
+  labels,
+  format = (value) => value.toFixed(2),
+}: {
+  labels: EndLabel[]
+  format?: (value: number) => string
+}) {
   const xScale = useXAxisScale()
   const yScale = useYAxisScale()
   const plot = usePlotArea()
@@ -74,7 +80,7 @@ export function EndLabels({ labels }: { labels: EndLabel[] }) {
             strokeWidth={3}
             paintOrder="stroke"
           >
-            {label.value.toFixed(2)}
+            {format(label.value)}
           </text>
         ))
       })}

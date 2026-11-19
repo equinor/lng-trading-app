@@ -16,6 +16,7 @@ import { Route as LayoutNewsletterRouteImport } from './routes/_layout/newslette
 import { Route as LayoutNews_summary_condensedRouteImport } from './routes/_layout/news_summary_condensed'
 import { Route as LayoutNews_summaryRouteImport } from './routes/_layout/news_summary'
 import { Route as LayoutMid_term_curvesRouteImport } from './routes/_layout/mid_term_curves'
+import { Route as LayoutLng_balanceRouteImport } from './routes/_layout/lng_balance'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -53,9 +54,15 @@ const LayoutMid_term_curvesRoute = LayoutMid_term_curvesRouteImport.update({
   path: '/mid_term_curves',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutLng_balanceRoute = LayoutLng_balanceRouteImport.update({
+  id: '/lng_balance',
+  path: '/lng_balance',
+  getParentRoute: () => LayoutRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
+  '/lng_balance': typeof LayoutLng_balanceRoute
   '/mid_term_curves': typeof LayoutMid_term_curvesRoute
   '/news_summary': typeof LayoutNews_summaryRoute
   '/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
@@ -63,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/pipeline_nominations': typeof LayoutPipeline_nominationsRoute
 }
 export interface FileRoutesByTo {
+  '/lng_balance': typeof LayoutLng_balanceRoute
   '/mid_term_curves': typeof LayoutMid_term_curvesRoute
   '/news_summary': typeof LayoutNews_summaryRoute
   '/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
@@ -73,6 +81,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
+  '/_layout/lng_balance': typeof LayoutLng_balanceRoute
   '/_layout/mid_term_curves': typeof LayoutMid_term_curvesRoute
   '/_layout/news_summary': typeof LayoutNews_summaryRoute
   '/_layout/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
@@ -84,6 +93,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/lng_balance'
     | '/mid_term_curves'
     | '/news_summary'
     | '/news_summary_condensed'
@@ -91,6 +101,7 @@ export interface FileRouteTypes {
     | '/pipeline_nominations'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/lng_balance'
     | '/mid_term_curves'
     | '/news_summary'
     | '/news_summary_condensed'
@@ -100,6 +111,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_layout'
+    | '/_layout/lng_balance'
     | '/_layout/mid_term_curves'
     | '/_layout/news_summary'
     | '/_layout/news_summary_condensed'
@@ -163,10 +175,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutMid_term_curvesRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/lng_balance': {
+      id: '/_layout/lng_balance'
+      path: '/lng_balance'
+      fullPath: '/lng_balance'
+      preLoaderRoute: typeof LayoutLng_balanceRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
 interface LayoutRouteChildren {
+  LayoutLng_balanceRoute: typeof LayoutLng_balanceRoute
   LayoutMid_term_curvesRoute: typeof LayoutMid_term_curvesRoute
   LayoutNews_summaryRoute: typeof LayoutNews_summaryRoute
   LayoutNews_summary_condensedRoute: typeof LayoutNews_summary_condensedRoute
@@ -176,6 +196,7 @@ interface LayoutRouteChildren {
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutLng_balanceRoute: LayoutLng_balanceRoute,
   LayoutMid_term_curvesRoute: LayoutMid_term_curvesRoute,
   LayoutNews_summaryRoute: LayoutNews_summaryRoute,
   LayoutNews_summary_condensedRoute: LayoutNews_summary_condensedRoute,

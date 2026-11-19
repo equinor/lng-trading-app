@@ -1,9 +1,0 @@
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/_layout/mid_term_curves')({
-  component: RouteComponent,
-})
-
-function RouteComponent() {
-  return <div>Hello "/_layout/mid_term_curves"!</div>
-}

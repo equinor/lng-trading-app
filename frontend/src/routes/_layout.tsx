@@ -29,7 +29,10 @@ function Layout() {
     pathname === "/news_summary" || pathname === "/news_summary_condensed"
   // The mid-term curves page fills the screen and lays out its own header and scrolling.
   const isFullScreenRoute = pathname === "/mid_term_curves"
-  const isWideRoute = isNewsSummaryRoute || pathname === "/pipeline_nominations"
+  const isWideRoute =
+    isNewsSummaryRoute ||
+    pathname === "/pipeline_nominations" ||
+    pathname === "/lng_balance"
 
   return (
     <SidebarProvider

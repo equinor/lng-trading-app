@@ -8,14 +8,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-
+import { ChartLegend } from "@/components/Common/ChartLegend"
+import { type EndLabel, EndLabels } from "@/components/Common/EndLabels"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { CycleSeries } from "@/features/pipeline_nominations/api"
-import { ChartLegend } from "@/features/pipeline_nominations/components/ChartLegend"
-import {
-  type EndLabel,
-  EndLabels,
-} from "@/features/pipeline_nominations/components/EndLabels"
 import {
   CHART_HEIGHT,
   cycleDays,

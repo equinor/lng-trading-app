@@ -31,6 +31,10 @@ spec:
         PIPELINE_NOMINATIONS_PLATTS_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data
         PIPELINE_NOMINATIONS_WOODMAC_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles
         PIPELINE_NOMINATIONS_WOODMAC_CYCLES_TABLE: ms_vulcan_gplng_plab.fundamentals_bronze.wm_genscape_pipeline_all_cycles
+        LNG_BALANCE_SUPPLY_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply_latest
+        LNG_BALANCE_DEMAND_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand_latest
+        LNG_BALANCE_SUPPLY_HISTORY_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply
+        LNG_BALANCE_DEMAND_HISTORY_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand
         DATABRICKS_USE_SERVICE_PRINCIPAL: "true"
         DATABRICKS_WORKSPACE_URL: adb-1023210238843247.7.azuredatabricks.net
         DATABRICKS_JOB_ID: "93951735174333"

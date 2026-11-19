@@ -3,6 +3,7 @@ import {
   Home,
   ListCollapse,
   Newspaper,
+  Scale,
   ScrollText,
   ShieldCheck,
   Waypoints,
@@ -36,6 +37,8 @@ const baseItems: Item[] = [
   },
   { type: "separator", key: "news-pipeline-divider" },
   { icon: Waypoints, tone: "emerald", title: "Pipeline Nominations", path: "/pipeline_nominations" },
+  { type: "separator", key: "pipeline-lng-balance-divider" },
+  { icon: Scale, tone: "sky", title: "LNG Balance", path: "/lng_balance" },
   { type: "separator", key: "pipeline-curve-builder-divider" },
   { icon: ChartSpline, tone: "rose", title: "Mid-term Curve Builder", path: "/mid_term_curves" },
 ]
