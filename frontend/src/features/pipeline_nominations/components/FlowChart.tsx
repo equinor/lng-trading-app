@@ -9,11 +9,8 @@ import {
   YAxis,
 } from "recharts"
 
-import { ChartLegend } from "@/features/pipeline_nominations/components/ChartLegend"
-import {
-  type EndLabel,
-  EndLabels,
-} from "@/features/pipeline_nominations/components/EndLabels"
+import { ChartLegend } from "@/components/Common/ChartLegend"
+import { type EndLabel, EndLabels } from "@/components/Common/EndLabels"
 import {
   CHART_HEIGHT,
   type ChartSeries,

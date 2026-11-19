@@ -15,6 +15,7 @@ import { Route as LayoutPipeline_nominationsRouteImport } from './routes/_layout
 import { Route as LayoutNewsletterRouteImport } from './routes/_layout/newsletter'
 import { Route as LayoutNews_summary_condensedRouteImport } from './routes/_layout/news_summary_condensed'
 import { Route as LayoutNews_summaryRouteImport } from './routes/_layout/news_summary'
+import { Route as LayoutLng_balanceRouteImport } from './routes/_layout/lng_balance'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -47,15 +48,22 @@ const LayoutNews_summaryRoute = LayoutNews_summaryRouteImport.update({
   path: '/news_summary',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutLng_balanceRoute = LayoutLng_balanceRouteImport.update({
+  id: '/lng_balance',
+  path: '/lng_balance',
+  getParentRoute: () => LayoutRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
+  '/lng_balance': typeof LayoutLng_balanceRoute
   '/news_summary': typeof LayoutNews_summaryRoute
   '/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
   '/newsletter': typeof LayoutNewsletterRoute
   '/pipeline_nominations': typeof LayoutPipeline_nominationsRoute
 }
 export interface FileRoutesByTo {
+  '/lng_balance': typeof LayoutLng_balanceRoute
   '/news_summary': typeof LayoutNews_summaryRoute
   '/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
   '/newsletter': typeof LayoutNewsletterRoute
@@ -65,6 +73,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
+  '/_layout/lng_balance': typeof LayoutLng_balanceRoute
   '/_layout/news_summary': typeof LayoutNews_summaryRoute
   '/_layout/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
   '/_layout/newsletter': typeof LayoutNewsletterRoute
@@ -75,12 +84,14 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/lng_balance'
     | '/news_summary'
     | '/news_summary_condensed'
     | '/newsletter'
     | '/pipeline_nominations'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/lng_balance'
     | '/news_summary'
     | '/news_summary_condensed'
     | '/newsletter'
@@ -89,6 +100,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_layout'
+    | '/_layout/lng_balance'
     | '/_layout/news_summary'
     | '/_layout/news_summary_condensed'
     | '/_layout/newsletter'
@@ -144,10 +156,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutNews_summaryRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/lng_balance': {
+      id: '/_layout/lng_balance'
+      path: '/lng_balance'
+      fullPath: '/lng_balance'
+      preLoaderRoute: typeof LayoutLng_balanceRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
 interface LayoutRouteChildren {
+  LayoutLng_balanceRoute: typeof LayoutLng_balanceRoute
   LayoutNews_summaryRoute: typeof LayoutNews_summaryRoute
   LayoutNews_summary_condensedRoute: typeof LayoutNews_summary_condensedRoute
   LayoutNewsletterRoute: typeof LayoutNewsletterRoute
@@ -156,6 +176,7 @@ interface LayoutRouteChildren {
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutLng_balanceRoute: LayoutLng_balanceRoute,
   LayoutNews_summaryRoute: LayoutNews_summaryRoute,
   LayoutNews_summary_condensedRoute: LayoutNews_summary_condensedRoute,
   LayoutNewsletterRoute: LayoutNewsletterRoute,

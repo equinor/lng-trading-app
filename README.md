@@ -128,7 +128,7 @@ flowchart TB
     API --> J["Databricks Jobs API<br/>(pipeline button)"]
 ```
 
-Each page is a feature: a folder under `backend/app/features/` (`news`, `pipeline_nominations`, `pipeline`) and one under `frontend/src/features/`. Each layer has one job:
+Each page is a feature: a folder under `backend/app/features/` (`news`, `pipeline_nominations`, `lng_balance`, `pipeline`) and one under `frontend/src/features/`. Each layer has one job:
 
 | Layer | Responsibility |
 |-------|----------------|
@@ -256,6 +256,50 @@ Each repository query returns the same row shape (facility, pipeline, day, BCF) 
 - The filter works like a Power BI slicer: ticking a facility selects all of its pipelines, expanding it lets you pick individual pipelines, and nothing ticked means everything.
 - Switching source clears the filter, because pipeline names differ between providers. Each source has its own latest date, so the chart windows and the day columns end at that source's last day. The facility lists differ too (WoodMac has Cove Point; Costa Azul and LNG Canada are not in the WoodMac table, so the WoodMac view takes their daily flow from Platts and they have no cycle data).
 - The latest WoodMac day usually holds an early nomination cycle, so it can still change.
+
+## LNG Balance page
+
+The page at `/lng_balance` shows the LNG balance model: supply, demand and **net short** (supply minus demand, so a negative figure is a shortfall). It is a feature folder on each side, as described under "Adding a New Page".
+
+| Part | File |
+|------|------|
+| Route (HTTP only) | `backend/app/features/lng_balance/router.py` |
+| Service (cache, filters, monthly totals, quarter and year roll-ups, net) | `backend/app/features/lng_balance/service.py` |
+| Repository (one SQL query per table) | `backend/app/features/lng_balance/repository.py` |
+| Region trees for the filters | `backend/app/features/lng_balance/regions.py` |
+| Response models, service provider | `backend/app/features/lng_balance/schemas.py`, `dependencies.py` |
+| API calls and types, helpers | `frontend/src/features/lng_balance/api.ts`, `utils.ts` |
+| Page | `frontend/src/features/lng_balance/pages/LngBalancePage.tsx` |
+| Route (URL and title) | `frontend/src/routes/_layout/lng_balance.tsx` |
+| Components | `frontend/src/features/lng_balance/components/` (`BalanceFilter`, `NetShortTable`, `SupplyDemandChart`, `NetShortChart`, `ForecastSelector`, `ForecastPicker`, `ForecastBadge`) |
+
+**Where the data comes from.** The page and its main figures use the `_latest` tables, which hold one forecast: Kpler actuals up to yesterday and then the LNG Model forecast. The tables without the suffix keep a snapshot for every `forecast_date`, so summing them counts each day once per snapshot and gives figures about 100 times too large. They are only used for the forecast comparison below, which reads one `forecast_date` at a time.
+
+| Side | Setting | Table | Columns used |
+|------|---------|-------|--------------|
+| Supply | `LNG_BALANCE_SUPPLY_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply_latest` | `country_name` (loading country), `Date`, `cargoes`, `value_kt`, `source` |
+| Demand | `LNG_BALANCE_DEMAND_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand_latest` | `country_name` (destination country), `Date`, `cargoes`, `value_kt`, `source` |
+| Supply, every forecast | `LNG_BALANCE_SUPPLY_HISTORY_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply` | `forecast_date`, `country_name`, `Date`, `cargoes`, `value_kt` |
+| Demand, every forecast | `LNG_BALANCE_DEMAND_HISTORY_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand` | `forecast_date`, `country_name`, `Date`, `cargoes`, `value_kt` |
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /api/v1/lng-balance/filters` | The loading source and destination trees (region, then country), limited to the countries in each table |
+| `GET /api/v1/lng-balance/overview?loading=A\|B&destination=C\|D&forecast_date=YYYY-MM-DD` | `months` (monthly supply and demand, in cargoes and kt), `table` (one row per year with its quarters, and net), `years` and `forecast_from`. An empty list means every country. `forecast_date` is optional: with it the page is built as that forecast saw it (actuals from the latest table for days before the date, that date's snapshot from the history table after it); without it, the latest forecast |
+| `GET /api/v1/lng-balance/forecast-dates` | The dates a forecast was created on (both tables have one), newest first |
+| `GET /api/v1/lng-balance/forecast-lines?dates=YYYY-MM-DD\|YYYY-MM-DD&loading=...&destination=...` | Net short by month (cargoes and kt) as forecast on each date, with the same country filters as `/overview`. At most 12 dates |
+
+**Behaviour to know about**
+
+- Each table's daily rows are summed to months in SQL and cached for 15 minutes, so every filter combination is answered from one small snapshot in memory.
+- Loading source filters supply and destination filters demand. The tables have no cargo-level link, so net short is filtered supply minus filtered demand.
+- Both units come back in every response, so the cargoes / kt switch and the year chips work in the browser without another request.
+- The tables only hold a country. The regions in the filters are defined in `regions.py`, with one region per country. A country in the data that is not listed there appears under "Unmapped", so add it to the right region.
+- The tables hold Kpler actuals and then LNG Model rows. The shaded part of the charts starts at the first month with model rows (`forecast_from`).
+- Only years covered by both tables are returned, so a part year at the end of one table is not shown.
+- **Choosing the forecast shown.** The **Forecast shown** selector at the top of the page (Latest, quick picks, or any date) sets one forecast for the table, the Supply and Demand chart and the blue net short line. For an older forecast, days before its date are actuals from the latest table and days after are that date's snapshot from the history table. A badge on the page title, the table and each chart says which forecast is shown: blue for the latest, amber for an older one. Views of past forecasts are cached in memory (24 per side).
+- **Comparing forecasts.** The **Compare with other forecasts** panel, always shown above the net short chart, has quick picks (1 week, 1 month, 3 months, 6 months, 1 year before the newest forecast, each snapped to the nearest earlier date that exists) and a date field. Each chosen forecast date adds one line, coloured to match its chip, showing supply minus demand as it was forecast on that date, drawn over the forecast shown for the page. The country filters, unit and year chips apply to these lines too. Up to 12 can be shown. A forecast only covers days from its own date, so when that date is not the 1st its first month is left out rather than shown as a false dip, and months past the end of demand are dropped. The backend reads only the requested `forecast_date`s from the history tables and keeps them in memory, since a past forecast never changes.
+- Years start collapsed in the table. A year expands into quarters and a quarter into months; the month rows come from the same `months` list the charts use, so they need no extra request. The net column is shaded by size, scaled separately for year, quarter and month rows.
 
 ## Authentication and Access Control
 
@@ -508,6 +552,7 @@ lng-trading-app/
 │   │   │   │   ├── normalization.py      # Tag and region normalization
 │   │   │   │   └── email_summary.py      # Summary email builder
 │   │   │   ├── pipeline_nominations/     # router, service, repository, schemas, dependencies
+│   │   │   ├── lng_balance/              # router, service, repository, regions, schemas, dependencies
 │   │   │   └── pipeline/                 # router.py + jobs.py (Databricks job trigger / status)
 │   │   └── core/
 │   │       ├── config.py        # All configuration (loaded from .env)
@@ -520,7 +565,7 @@ lng-trading-app/
 │   ├── src/
 │   │   ├── main.tsx            # App entry point
 │   │   ├── routes/             # TanStack Router file-based routes: thin files with URL and title only
-│   │   │   └── _layout/        # newsletter, news_summary, news_summary_condensed, pipeline_nominations
+│   │   │   └── _layout/        # newsletter, news_summary, news_summary_condensed, pipeline_nominations, lng_balance
 │   │   ├── features/           # One folder per feature (page)
 │   │   │   ├── news/
 │   │   │   │   ├── pages/       # NewsletterPage, NewsSummaryPage, NewsSummaryCondensedPage
@@ -529,8 +574,9 @@ lng-trading-app/
 │   │   │   │   ├── api.ts       # API functions (getNews, patch*)
 │   │   │   │   ├── utils.ts     # Helpers (formatTime, cleanTagValue, etc.)
 │   │   │   │   └── layout.ts    # Layout and grouping logic
+│   │   │   ├── lng_balance/            # pages, components (BalanceFilter, NetShortTable, SupplyDemandChart, NetShortChart), api.ts, utils.ts
 │   │   │   └── pipeline_nominations/   # pages, components (PipelineFilter, FlowChart, NominationsMatrix), api.ts, utils.ts
-│   │   ├── components/         # Shared UI: ui/ (shadcn), Common/, Sidebar/
+│   │   ├── components/         # Shared UI: ui/ (shadcn), Common/ (incl. EndLabels, ChartLegend), Sidebar/
 │   │   ├── hooks/              # Shared hooks (useAuth, useDateFilter, useEquinorFont, ...)
 │   │   ├── services/api_client.ts   # fetch wrapper used by every feature's api.ts
 │   │   └── lib/utils.ts        # Tailwind merge + formatHtmlText
@@ -566,6 +612,10 @@ lng-trading-app/
 | `PIPELINE_NOMINATIONS_WOODMAC_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles` | WoodMac Genscape pipeline nominations table |
 | `PIPELINE_NOMINATIONS_WOODMAC_CYCLES_TABLE` | `ms_vulcan_gplng_plab.fundamentals_bronze.wm_genscape_pipeline_all_cycles` | WoodMac table that keeps every nomination cycle (by-cycle view) |
 | `PIPELINE_NOMINATIONS_AI_ENDPOINT` | `databricks-claude-sonnet-5-5` | Databricks serving endpoint that `ai_query` calls for the AI overview |
+| `LNG_BALANCE_SUPPLY_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply_latest` | LNG balance model daily supply by loading country (latest forecast) |
+| `LNG_BALANCE_DEMAND_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand_latest` | LNG balance model daily demand by destination country (latest forecast) |
+| `LNG_BALANCE_SUPPLY_HISTORY_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply` | Same supply table with a snapshot per `forecast_date`, for comparing forecasts |
+| `LNG_BALANCE_DEMAND_HISTORY_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand` | Same demand table with a snapshot per `forecast_date`, for comparing forecasts |
 | `SECRET_KEY` | random | JWT signing key |
 | `BACKEND_CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
 | `FIRST_SUPERUSER` | `admin@example.com` | Default admin user email |

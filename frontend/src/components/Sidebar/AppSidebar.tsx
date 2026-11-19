@@ -1,4 +1,4 @@
-import { Activity, Home, Users, Newspaper, Layout } from "lucide-react"
+import { Activity, Home, Users, Newspaper, Layout, Scale } from "lucide-react"
 
 import { SidebarAppearance } from "@/components/Common/Appearance"
 import { Logo } from "@/components/Common/Logo"
@@ -19,6 +19,7 @@ const baseItems: Item[] = [
   { icon: Layout, title: "News Summary", path: "/news_summary" },
   { icon: Layout, title: "News Summary (Condensed)", path: "/news_summary_condensed" },
   { icon: Activity, title: "Pipeline Nominations", path: "/pipeline_nominations" },
+  { icon: Scale, title: "LNG Balance", path: "/lng_balance" },
 ]
 
 export function AppSidebar() {
