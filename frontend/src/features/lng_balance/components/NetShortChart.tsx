@@ -15,6 +15,8 @@ import { ChartLegend } from "@/components/Common/ChartLegend"
 import { type EndLabel, EndLabels } from "@/components/Common/EndLabels"
 import type { ForecastLine, MonthPoint } from "@/features/lng_balance/api"
 import { ForecastBadge } from "@/features/lng_balance/components/ForecastBadge"
+import { ZoomControls } from "@/features/lng_balance/components/ZoomControls"
+import { useChartZoom } from "@/features/lng_balance/hooks/useChartZoom"
 import {
   axisTicks,
   DEMAND_COLOR,
@@ -35,7 +37,6 @@ import {
 type Props = {
   months: MonthPoint[]
   unit: Unit
-  yearCount: number
   forecastFrom: string | null
   /** Older forecasts to draw next to the current one, in the order they were added. */
   forecasts: ForecastLine[]
@@ -61,7 +62,6 @@ const keyOf = (date: string) => `f_${date}`
 export function NetShortChart({
   months,
   unit,
-  yearCount,
   forecastFrom,
   forecasts,
   years,
@@ -71,6 +71,7 @@ export function NetShortChart({
   isLatest,
 }: Props) {
   const title = `Net short (${UNIT_LABEL[unit]})`
+  const zoom = useChartZoom(months.length)
   const lines = forecasts.map((line, index) => ({
     ...line,
     key: keyOf(line.forecast_date),
@@ -80,18 +81,22 @@ export function NetShortChart({
     ),
   }))
 
-  const data = months.map((m) => {
-    const row: Record<string, number | string> = {
-      x: m.month,
-      [CURRENT]: m.supply[unit] - m.demand[unit],
-    }
-    for (const line of lines) {
-      const point = line.months.find((p) => p.month === m.month)
-      if (point) row[line.key] = point.net[unit]
-    }
-    return row
-  })
+  const data = months
+    .map((m) => {
+      const row: Record<string, number | string> = {
+        x: m.month,
+        [CURRENT]: m.supply[unit] - m.demand[unit],
+      }
+      for (const line of lines) {
+        const point = line.months.find((p) => p.month === m.month)
+        if (point) row[line.key] = point.net[unit]
+      }
+      return row
+    })
+    .slice(zoom.start, zoom.end + 1)
+  const xs = data.map((d) => String(d.x))
   const values = data.map((d) => Number(d[CURRENT]))
+  // The axis, the worst and best lines and the labels all follow what is on screen.
   const axis = axisTicks(
     data.flatMap((d) =>
       Object.entries(d)
@@ -99,10 +104,7 @@ export function NetShortChart({
         .map(([, v]) => Number(v)),
     ),
   )
-  const { ticks, every } = monthTicks(
-    data.map((d) => String(d.x)),
-    yearCount,
-  )
+  const { ticks, every } = monthTicks(xs)
   const worst = Math.min(...values)
   const best = Math.max(...values)
   const worstIndex = values.indexOf(worst)
@@ -126,7 +128,7 @@ export function NetShortChart({
     })
     for (const line of lines) {
       const end = line.months[line.months.length - 1]
-      if (end) {
+      if (end && xs.includes(end.month)) {
         endLabels.push({
           key: line.key,
           x: end.month,
@@ -152,13 +154,12 @@ export function NetShortChart({
         <h2 className="text-sm font-semibold">{title}</h2>
         <ForecastBadge date={shownForecast} latest={isLatest} />
       </div>
-      <p className="mb-2 text-xs text-muted-foreground">
+      <p className="mb-2 min-h-12 text-xs text-muted-foreground">
         Supply minus demand, so a negative figure is a shortfall. The blue line
         is the forecast shown for the whole page, and its dashed lines mark its
-        worst and best months. Each extra line is the short as it was forecast
-        on another date.
+        worst and best months on screen. Drag across the chart to zoom in.
       </p>
-      {picker}
+      <ZoomControls zoom={zoom} className="mb-2" />
       {loadingForecasts && (
         <p className="mb-2 text-xs text-muted-foreground">
           Loading forecasts...
@@ -170,11 +171,12 @@ export function NetShortChart({
         </p>
       ) : (
         <>
-          <div className="text-muted-foreground">
+          <div className="select-none text-muted-foreground">
             <ResponsiveContainer width="100%" height={HEIGHT}>
               <LineChart
                 data={data}
                 margin={{ top: 8, right: 52, bottom: 0, left: 0 }}
+                {...zoom.handlers(xs)}
               >
                 <CartesianGrid
                   stroke="currentColor"
@@ -244,7 +246,7 @@ export function NetShortChart({
                   type="monotone"
                   stroke={NET_COLOR}
                   strokeWidth={2.5}
-                  dot={false}
+                  dot={zoom.zoomed && data.length <= 36 ? { r: 2.5 } : false}
                   isAnimationActive={false}
                   label={({ x, y, value, index }) =>
                     labelled(Number(index)) ? (
@@ -267,6 +269,14 @@ export function NetShortChart({
                     )
                   }
                 />
+                {zoom.selection && (
+                  <ReferenceArea
+                    x1={xs[zoom.selection[0]]}
+                    x2={xs[zoom.selection[1]]}
+                    fill="currentColor"
+                    fillOpacity={0.2}
+                  />
+                )}
                 <EndLabels labels={endLabels} format={formatValue} />
               </LineChart>
             </ResponsiveContainer>
@@ -279,6 +289,7 @@ export function NetShortChart({
           />
         </>
       )}
+      <div className="mt-3">{picker}</div>
     </section>
   )
 }

@@ -123,9 +123,19 @@ export function axisTicks(values: number[], target = 7) {
   return { ticks, min, max }
 }
 
-/** Month ticks that get sparser as more years are shown: yearly, half-yearly or quarterly. */
-export function monthTicks(months: string[], yearCount: number) {
-  const every = yearCount > 6 ? 12 : yearCount > 2 ? 6 : 3
+/**
+ * Month ticks that get sparser as more months are shown: yearly, half-yearly, quarterly or every
+ * month. It follows the months on screen, so zooming in adds ticks.
+ */
+export function monthTicks(months: string[]) {
+  const every =
+    months.length > 72
+      ? 12
+      : months.length > 30
+        ? 6
+        : months.length > 14
+          ? 3
+          : 1
   return {
     every,
     ticks: months.filter((m) => parseMonth(m).getMonth() % every === 0),

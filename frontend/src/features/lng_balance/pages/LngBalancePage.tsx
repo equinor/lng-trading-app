@@ -207,90 +207,92 @@ export function LngBalancePage() {
         )}
       </fieldset>
 
-      {/* Filters and table on the left, the charts stacked in the remaining width on wide screens. */}
-      <div className="grid items-start gap-4 lg:grid-cols-[13rem_13rem_minmax(0,1fr)] xl:grid-cols-[13rem_13rem_minmax(24rem,28rem)_minmax(0,1fr)]">
-        <aside className="h-fit rounded-lg border p-4">
-          {filtersQuery.isPending ? (
-            <FilterSkeleton />
-          ) : (
-            <BalanceFilter
-              title="Loading Source"
-              titleClassName="text-red-600"
-              nodes={filtersQuery.data?.loading ?? []}
-              selected={loading}
-              onChange={setLoading}
-            />
-          )}
-        </aside>
-        <aside className="h-fit rounded-lg border p-4">
-          {filtersQuery.isPending ? (
-            <FilterSkeleton />
-          ) : (
-            <BalanceFilter
-              title="Destination"
-              titleClassName="text-green-600"
-              nodes={filtersQuery.data?.destination ?? []}
-              selected={destination}
-              onChange={setDestination}
-            />
-          )}
-        </aside>
-
-        <section
-          className="h-fit min-w-0 rounded-lg border p-4"
-          aria-label={`Net short (${UNIT_LABEL[unit]})`}
-        >
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">
-              Net short ({UNIT_LABEL[unit]})
-            </h2>
-            <ForecastBadge date={shownForecast} latest={isLatest} />
-          </div>
-          {overview ? (
-            <NetShortTable rows={tableRows} months={months} unit={unit} />
-          ) : (
-            !overviewQuery.isError && <Skeleton className="h-96 w-full" />
-          )}
-        </section>
-
-        <div className="grid min-w-0 items-start gap-4 lg:col-span-3 lg:grid-cols-2 xl:col-span-1 xl:grid-cols-1">
-          {overview ? (
-            <>
-              <SupplyDemandChart
-                months={months}
-                unit={unit}
-                yearCount={years.size}
-                forecastFrom={overview.forecast_from}
-                shownForecast={shownForecast}
-                isLatest={isLatest}
+      {/* Filters stacked on the left; on the right the two charts side by side with the table under both. */}
+      <div className="grid items-start gap-4 xl:grid-cols-[14rem_minmax(0,1fr)]">
+        <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-1">
+          <aside className="h-fit rounded-lg border p-4">
+            {filtersQuery.isPending ? (
+              <FilterSkeleton />
+            ) : (
+              <BalanceFilter
+                title="Loading Source"
+                titleClassName="text-red-600"
+                nodes={filtersQuery.data?.loading ?? []}
+                selected={loading}
+                onChange={setLoading}
               />
-              <NetShortChart
-                months={months}
-                unit={unit}
-                yearCount={years.size}
-                forecastFrom={overview.forecast_from}
-                shownForecast={shownForecast}
-                isLatest={isLatest}
-                forecasts={forecastLines}
-                years={years}
-                loadingForecasts={forecastsQuery.isFetching}
-                picker={
-                  <ForecastPicker
-                    available={availableForecasts}
-                    selected={forecastDates}
-                    onChange={setForecastDates}
-                  />
-                }
+            )}
+          </aside>
+          <aside className="h-fit rounded-lg border p-4">
+            {filtersQuery.isPending ? (
+              <FilterSkeleton />
+            ) : (
+              <BalanceFilter
+                title="Destination"
+                titleClassName="text-green-600"
+                nodes={filtersQuery.data?.destination ?? []}
+                selected={destination}
+                onChange={setDestination}
               />
-            </>
-          ) : (
-            !overviewQuery.isError && (
+            )}
+          </aside>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="grid items-stretch gap-4 lg:grid-cols-2">
+            {overview ? (
               <>
-                <Skeleton className="h-80 w-full" />
-                <Skeleton className="h-80 w-full" />
+                <SupplyDemandChart
+                  months={months}
+                  unit={unit}
+                  forecastFrom={overview.forecast_from}
+                  shownForecast={shownForecast}
+                  isLatest={isLatest}
+                />
+                <NetShortChart
+                  months={months}
+                  unit={unit}
+                  forecastFrom={overview.forecast_from}
+                  shownForecast={shownForecast}
+                  isLatest={isLatest}
+                  forecasts={forecastLines}
+                  years={years}
+                  loadingForecasts={forecastsQuery.isFetching}
+                  picker={
+                    <ForecastPicker
+                      available={availableForecasts}
+                      selected={forecastDates}
+                      onChange={setForecastDates}
+                    />
+                  }
+                />
               </>
-            )
-          )}
+            ) : (
+              !overviewQuery.isError && (
+                <>
+                  <Skeleton className="h-80 w-full" />
+                  <Skeleton className="h-80 w-full" />
+                </>
+              )
+            )}
+          </div>
+
+          <section
+            className="min-w-0 rounded-lg border p-4"
+            aria-label={`Net short (${UNIT_LABEL[unit]}) by period`}
+          >
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">
+                Net short table ({UNIT_LABEL[unit]})
+              </h2>
+              <ForecastBadge date={shownForecast} latest={isLatest} />
+            </div>
+            {overview ? (
+              <NetShortTable rows={tableRows} months={months} unit={unit} />
+            ) : (
+              !overviewQuery.isError && <Skeleton className="h-96 w-full" />
+            )}
+          </section>
         </div>
       </div>
     </div>
