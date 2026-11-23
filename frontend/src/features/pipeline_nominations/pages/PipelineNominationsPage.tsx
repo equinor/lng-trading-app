@@ -4,6 +4,7 @@ import { RequestStatus } from "@/components/Common/RequestStatus"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { getFilters, getOverview } from "@/features/pipeline_nominations/api"
 import { AiOverview } from "@/features/pipeline_nominations/components/AiOverview"
 import { CycleChart } from "@/features/pipeline_nominations/components/CycleChart"
 import { FlowChart } from "@/features/pipeline_nominations/components/FlowChart"
@@ -12,17 +13,12 @@ import {
   NominationsMatrix,
 } from "@/features/pipeline_nominations/components/NominationsMatrix"
 import { PipelineFilter } from "@/features/pipeline_nominations/components/PipelineFilter"
-import { useEquinorFont } from "@/hooks/useEquinorFont"
-import {
-  getFilters,
-  getOverview,
-  type Source,
-} from "@/features/pipeline_nominations/api"
 import {
   buildColorMap,
   formatDay,
   fromDaily,
 } from "@/features/pipeline_nominations/utils"
+import { useEquinorFont } from "@/hooks/useEquinorFont"
 
 const QUERY_ROOT = "pipeline_nominations"
 
@@ -30,64 +26,41 @@ type FlowWindow = "14" | "180"
 const FIVE_MINUTES = 5 * 60_000
 const ONE_HOUR = 60 * 60_000
 
+const TITLE = "US Daily Pipeline Nominations (Monthly)"
+const DESCRIPTION =
+  "Pipeline nominations to LNG plants from the gold feedgas tracking table: WoodMac Genscape for most plants, and Platts for Costa Azul and LNG Canada, whose cycles are inferred from publish time. The monthly and daily views use the latest cycle of each day."
+
 const PERIOD_SUBTITLE: Record<MatrixPeriod, string> = {
   day: "Daily volumes for the last 14 days and change on the previous day. Newest on the left.",
   cycle:
-    "Final nomination of each cycle (Timely, Evening, ID1 to ID3) for the last 3 gas days. The % is the change on the previous cycle of the same day. Newest on the left. Refreshed every hour.",
+    "Final nomination of each cycle (Timely, Evening, ID1 to ID3, then Post once the gas day is over) for the last 3 gas days. The % is the change on the previous cycle of the same day. Newest on the left. Refreshed every hour.",
   month:
     "Average daily volume of each month and change on the previous month. Newest on the left.",
-}
-
-const SOURCES: Record<
-  Source,
-  { label: string; title: string; description: string }
-> = {
-  woodmac: {
-    label: "WoodMac Genscape",
-    title: "WoodMac Genscape US Daily Pipeline Nominations (Monthly)",
-    description:
-      "WoodMac Genscape nominations to LNG plants. The monthly and daily views use the latest cycle of each day. Costa Azul and LNG Canada are not covered by WoodMac, so their daily flow comes from Platts.",
-  },
-  platts: {
-    label: "Platts",
-    title: "Platts US Daily Pipeline Nominations (Monthly)",
-    description: "Platts pipeline nominations to LNG plants.",
-  },
 }
 
 export function PipelineNominationsPage() {
   useEquinorFont()
 
-  const [source, setSource] = useState<Source>("woodmac")
   // Empty selection means every facility and pipeline.
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const selectedTokens = useMemo(() => [...selected].sort(), [selected])
   const [period, setPeriod] = useState<MatrixPeriod>("day")
   const [flowWindow, setFlowWindow] = useState<FlowWindow>("14")
 
-  // Pipeline names differ between providers, so a selection only makes sense for one source.
-  const changeSource = (next: Source) => {
-    setSource(next)
-    setSelected(new Set())
-    // The cycle view only exists for WoodMac; Platts has no intraday data yet.
-    if (next === "platts") setPeriod((p) => (p === "cycle" ? "day" : p))
-  }
-
   const filtersQuery = useQuery({
-    queryKey: [QUERY_ROOT, "filters", source],
-    queryFn: () => getFilters(source),
+    queryKey: [QUERY_ROOT, "filters"],
+    queryFn: getFilters,
     staleTime: 3 * FIVE_MINUTES,
   })
 
   const overviewQuery = useQuery({
-    queryKey: [QUERY_ROOT, "overview", source, selectedTokens],
-    queryFn: () => getOverview(source, selectedTokens),
-    // Keep the old data while filters change, but not when the source changes.
-    placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[2] === source ? previous : undefined,
+    queryKey: [QUERY_ROOT, "overview", selectedTokens],
+    queryFn: () => getOverview(selectedTokens),
+    // Keep the old data while the filter changes.
+    placeholderData: (previous) => previous,
     staleTime: FIVE_MINUTES,
-    // WoodMac cycle data is refreshed hourly, so keep an open page up to date.
-    refetchInterval: source === "woodmac" ? ONE_HOUR : false,
+    // Cycle data is refreshed hourly, so keep an open page up to date.
+    refetchInterval: ONE_HOUR,
   })
 
   const facilities = useMemo(
@@ -103,7 +76,6 @@ export function PipelineNominationsPage() {
   const overview = overviewQuery.data
   const latestDate =
     overview?.latest_date ?? filtersQuery.data?.latest_date ?? null
-  const hasCycles = source === "woodmac"
   const tables = overview && {
     month: overview.monthly_table,
     day: overview.daily_table,
@@ -111,41 +83,29 @@ export function PipelineNominationsPage() {
   }
   // Facilities without cycle data (Costa Azul, LNG Canada) stay in the cycle table, greyed out.
   const noCycleData = useMemo(() => {
-    if (!overview || !hasCycles) return []
+    if (!overview) return []
     const withCycles = new Set(
       overview.cycle_table.facilities.map((f) => f.name),
     )
     return overview.daily_table.facilities.filter(
       (f) => !withCycles.has(f.name),
     )
-  }, [overview, hasCycles])
+  }, [overview])
 
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold">{SOURCES[source].title}</h1>
+          <h1 className="text-2xl font-semibold">{TITLE}</h1>
           <p className="text-sm text-muted-foreground">
             {latestDate ? `Data to ${formatDay(latestDate, true)}. ` : ""}
-            Volumes in BCF per day. {SOURCES[source].description} Leave the filter empty to
+            Volumes in BCF per day. {DESCRIPTION} Leave the filter empty to
             include every facility.
           </p>
           {overviewQuery.isFetching && (
             <RequestStatus>Updating...</RequestStatus>
           )}
         </div>
-        <Tabs
-          value={source}
-          onValueChange={(value) => changeSource(value as Source)}
-        >
-          <TabsList aria-label="Data source">
-            {(Object.keys(SOURCES) as Source[]).map((key) => (
-              <TabsTrigger key={key} value={key}>
-                {SOURCES[key].label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
       </header>
 
       {(overviewQuery.isError || filtersQuery.isError) && (
@@ -177,7 +137,7 @@ export function PipelineNominationsPage() {
 
         {/* The table comes first as the main view, with the charts below it. */}
         <div className="flex min-w-0 flex-col gap-4">
-          <AiOverview source={source} selected={selectedTokens} />
+          <AiOverview selected={selectedTokens} />
           {overview ? (
             <section
               className="rounded-lg border p-4"
@@ -198,9 +158,7 @@ export function PipelineNominationsPage() {
                 >
                   <TabsList aria-label="Table period">
                     <TabsTrigger value="day">Day on day</TabsTrigger>
-                    <TabsTrigger value="cycle" disabled={!hasCycles}>
-                      By cycle
-                    </TabsTrigger>
+                    <TabsTrigger value="cycle">By cycle</TabsTrigger>
                     <TabsTrigger value="month">Month on month</TabsTrigger>
                   </TabsList>
                 </Tabs>
@@ -218,13 +176,7 @@ export function PipelineNominationsPage() {
           )}
 
           {overview ? (
-            <div
-              className={
-                hasCycles
-                  ? "grid items-start gap-4 xl:grid-cols-2"
-                  : "flex flex-col gap-4"
-              }
-            >
+            <div className="grid items-start gap-4 xl:grid-cols-2">
               <FlowChart
                 title="Flow BCF/d"
                 series={fromDaily(
@@ -246,15 +198,13 @@ export function PipelineNominationsPage() {
                   </Tabs>
                 }
               />
-              {hasCycles && (
-                <CycleChart series={overview.cycle_series} colorOf={colorOf} />
-              )}
+              <CycleChart series={overview.cycle_series} colorOf={colorOf} />
             </div>
           ) : (
             !overviewQuery.isError && (
               <div className="grid gap-4 xl:grid-cols-2">
                 <Skeleton className="h-80 w-full" />
-                {hasCycles && <Skeleton className="h-80 w-full" />}
+                <Skeleton className="h-80 w-full" />
               </div>
             )
           )}

@@ -84,7 +84,7 @@ export function CycleChart({ series, colorOf }: Props) {
         <p className="mb-2 text-xs text-muted-foreground">
           Gas day {formatDay(day, true)}. The figure at the end of each line is
           its latest cycle. Cycles that have not happened yet have no point.
-          Facilities with no cycle data are not shown.
+          Post is the figure after the gas day has ended.
         </p>
       )}
       {!day ? (

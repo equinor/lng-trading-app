@@ -83,16 +83,10 @@ class Settings(BaseSettings):
     # UC table name you are using
     NEWS_TABLE: str = "lng_apac.news_state"
 
-    # Pipeline nominations to LNG plants, from two providers
-    PIPELINE_NOMINATIONS_PLATTS_TABLE: str = (
-        "ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data"
-    )
-    PIPELINE_NOMINATIONS_WOODMAC_TABLE: str = (
-        "ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles"
-    )
-    # Bronze keeps every nomination cycle; silver keeps only the latest one per day.
-    PIPELINE_NOMINATIONS_WOODMAC_CYCLES_TABLE: str = (
-        "ms_vulcan_gplng_plab.fundamentals_bronze.wm_genscape_pipeline_all_cycles"
+    # Pipeline nominations to LNG plants: the gold table covers every plant (Platts for LNG Canada
+    # and Costa Azul, WoodMac for the rest).
+    PIPELINE_NOMINATIONS_GOLD_TABLE: str = (
+        "ms_vulcan_gplng_plab.fundamentals_gold.us_lng_feedgas_tracking"
     )
     # Databricks Foundation Model serving endpoint used by ai_query for the AI overview.
     PIPELINE_NOMINATIONS_AI_ENDPOINT: str = "databricks-claude-sonnet-5-5"

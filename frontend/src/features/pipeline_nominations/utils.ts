@@ -19,6 +19,7 @@ const CYCLES = [
   { code: "I1", label: "ID1" },
   { code: "I2", label: "ID2" },
   { code: "I3", label: "ID3" },
+  { code: "PO", label: "Post" },
 ]
 
 /** The gas days present in the cycle data, newest first. */
