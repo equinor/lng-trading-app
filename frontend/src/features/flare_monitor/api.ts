@@ -11,6 +11,8 @@ export type CameraStatus = {
   camera_id: string
   plant: string | null
   state: FlareState
+  // No image has arrived recently, so the state is shown as unknown.
+  stale: boolean
   since: string | null
   last_image_at: string | null
   last_label: FlareLabel | null

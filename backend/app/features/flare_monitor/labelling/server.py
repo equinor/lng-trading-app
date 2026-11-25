@@ -8,8 +8,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from app.features.flare_monitor.collector.classifier import ThermalBlobClassifier
-from app.features.flare_monitor.labelling.evaluate import evaluate
+from app.features.flare_monitor.collector.classifier import (
+    CameraConfig,
+    ThermalBlobClassifier,
+)
+from app.features.flare_monitor.labelling.evaluate import camera_config, evaluate
 from app.features.flare_monitor.labelling.images import LabelImage
 from app.features.flare_monitor.labelling.store import LabelStore
 
@@ -17,12 +20,19 @@ INDEX = Path(__file__).with_name("index.html")
 
 
 class LabellingApp:
-    def __init__(self, scan: Callable[[], list[LabelImage]], store: LabelStore) -> None:
+    def __init__(
+        self,
+        scan: Callable[[], list[LabelImage]],
+        store: LabelStore,
+        base: dict[str, CameraConfig] | None = None,
+    ) -> None:
         self._scan = scan
         self.images: dict[str, LabelImage] = {}
         self.ordered: list[LabelImage] = []
         self.refresh()
         self.store = store
+        # The cameras as configured today (FLARE_CAMERAS), which the report builds on.
+        self.base = base or {}
         self.classifier = ThermalBlobClassifier()
         self._lock = threading.Lock()
 
@@ -33,6 +43,12 @@ class LabellingApp:
 
     def state(self) -> dict[str, Any]:
         self.refresh()
+        full = CameraConfig().roi
+        regions = {}
+        for camera_id in {*self.base, *self.store.cameras}:
+            roi = camera_config(camera_id, self.store, self.base).roi
+            if roi != full:
+                regions[camera_id] = {"roi": list(roi)}
         return {
             "images": [
                 {
@@ -43,12 +59,12 @@ class LabellingApp:
                 }
                 for image in self.ordered
             ],
-            "cameras": self.store.cameras,
+            "cameras": regions,
         }
 
     def guess(self, key: str) -> dict[str, Any]:
         image = self.images[key]
-        config = self.store.camera_config(image.camera_id)
+        config = camera_config(image.camera_id, self.store, self.base)
         result = self.classifier.classify(image.path.read_bytes(), config)
         return {
             "label": result.label.value if result.usable else "unusable",
@@ -58,7 +74,7 @@ class LabellingApp:
 
     def report(self) -> dict[str, Any]:
         with self._lock:
-            return evaluate(self.ordered, self.store)
+            return evaluate(self.ordered, self.store, self.base)
 
 
 def make_handler(app: LabellingApp) -> type[BaseHTTPRequestHandler]:

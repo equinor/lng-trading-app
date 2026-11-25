@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 # WoodMac allows this many cameras on the dashboard at once.
 MAX_CAMERAS = 24
 _ADD = re.compile(r"^\s*add\s*$", re.IGNORECASE)
+_CLEAR = re.compile(r"^\s*clear\s*$", re.IGNORECASE)
 
 
 _IMAGE_LIST = re.compile(r"/natgas/iot/v1/cameras/\d+/images")
@@ -36,11 +37,26 @@ async def limit_history(context: BrowserContext, hours: int) -> None:
     await context.route(_IMAGE_LIST, rewrite)
 
 
-async def ensure_cameras(page: Page, names: list[str]) -> list[str]:
-    """Put the named cameras on the dashboard. Returns the names that could not be added.
+async def _shown_names(page: Page) -> list[str]:
+    """Names of the cameras on the dashboard, read from the panel headers.
 
-    Cameras already on the dashboard are left alone; the "Add Cameras" list only offers the
-    ones that are not. Names must match WoodMac's camera names exactly.
+    Matching the name anywhere on the page is not enough: the Add Cameras dialog lists the
+    names too.
+    """
+    names: list[str] = await page.evaluate(
+        """() => [...document.querySelectorAll('.camera-header')].map(
+            header => header.innerText.replace('(reference image)', '').trim()
+        )"""
+    )
+    return names
+
+
+async def ensure_cameras(page: Page, names: list[str]) -> list[str]:
+    """Make the dashboard show exactly the named cameras. Returns the names it could not add.
+
+    Names must match WoodMac's camera names exactly. If the dashboard shows any other camera,
+    it is cleared first and the named ones are added again, so cameras you do not track are not
+    loaded. The "Add Cameras" list only offers cameras that are not on the dashboard yet.
     """
     if not names:
         return []
@@ -51,14 +67,23 @@ async def ensure_cameras(page: Page, names: list[str]) -> list[str]:
             len(names),
         )
 
-    missing = [
-        name for name in names if await page.get_by_text(name, exact=True).count() == 0
-    ]
+    shown = await _shown_names(page)
+    extra = [name for name in shown if name not in names]
+    if extra:
+        logger.info(
+            "Removing %s camera(s) that are not tracked from the dashboard", len(extra)
+        )
+        await page.locator("button", has_text=_CLEAR).first.click()
+        await page.wait_for_timeout(2_000)
+        shown = await _shown_names(page)
+    missing = [name for name in names if name not in shown]
     if not missing:
         return []
 
-    await page.locator("button", has_text=_ADD).first.click()
     dialog = page.locator("mat-dialog-container")
+    # With an empty dashboard the page opens the Add Cameras dialog by itself.
+    if await dialog.count() == 0:
+        await page.locator("button", has_text=_ADD).first.click()
     select = dialog.locator("select")
     await select.wait_for(state="visible", timeout=15_000)
     offered = await select.locator("option").all_text_contents()
@@ -76,9 +101,8 @@ async def ensure_cameras(page: Page, names: list[str]) -> list[str]:
         logger.warning("The Add Cameras dialog did not close")
 
     await page.wait_for_timeout(3_000)
-    still_missing = [
-        name for name in names if await page.get_by_text(name, exact=True).count() == 0
-    ]
+    shown = await _shown_names(page)
+    still_missing = [name for name in names if name not in shown]
     if still_missing:
         logger.warning(
             "Cameras not on the WoodMac dashboard: %s", ", ".join(still_missing)

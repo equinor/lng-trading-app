@@ -129,13 +129,17 @@ async def run() -> None:
                 await _close(session)
                 session = reader = None
 
-            await asyncio.to_thread(processor.check_missing)
-            removed = cache.purge(dt.datetime.now(dt.timezone.utc))
-            if removed:
-                logger.info(
-                    "Discarded %s cached image(s) older than the retention window",
-                    removed,
-                )
+            try:
+                await asyncio.to_thread(processor.check_missing)
+                removed = cache.purge(dt.datetime.now(dt.timezone.utc))
+                if removed:
+                    logger.info(
+                        "Discarded %s cached image(s) older than the retention window",
+                        removed,
+                    )
+            except Exception:
+                # A failed write is kept by the processor and retried next cycle.
+                logger.exception("Housekeeping failed")
             await asyncio.sleep(delay)
 
 

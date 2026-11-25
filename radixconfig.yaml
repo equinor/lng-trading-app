@@ -1,7 +1,7 @@
 apiVersion: radix.equinor.com/v1
 kind: RadixApplication
 metadata:
-  name: lng-trading-app
+  name: lng-fundamentals-app
 spec:
   build:
     useBuildKit: true

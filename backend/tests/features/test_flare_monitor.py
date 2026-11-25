@@ -31,6 +31,7 @@ from app.features.flare_monitor.labelling.evaluate import evaluate
 from app.features.flare_monitor.labelling.images import scan_images
 from app.features.flare_monitor.labelling.server import LabellingApp
 from app.features.flare_monitor.labelling.store import LabelStore
+from app.features.flare_monitor.service import FlareMonitorService
 
 UTC = dt.timezone.utc
 T0 = dt.datetime(2026, 11, 23, 12, 0, tzinfo=UTC)
@@ -155,11 +156,14 @@ class FakeRepository:
         self.observations: list[dict[str, Any]] = []
         self.states: dict[str, dict[str, Any]] = {}
         self.events: list[dict[str, Any]] = []
+        self.persisted: dict[str, dict[str, Any]] = {}
+        self.fail_state = 0  # the next N state writes raise
+        self.fail_events = 0  # the next N event writes raise
 
     def ensure_tables(self) -> None: ...
 
     def load_states(self) -> dict[str, dict[str, Any]]:
-        return {}
+        return self.persisted
 
     def known_images(self, since: dt.datetime) -> set[tuple[str, dt.datetime]]:
         return set()
@@ -168,13 +172,32 @@ class FakeRepository:
         self.observations.extend(rows)
 
     def save_state(self, row: dict[str, Any]) -> None:
+        if self.fail_state:
+            self.fail_state -= 1
+            raise RuntimeError("database unavailable")
         self.states[row["camera_id"]] = row
 
     def add_event(self, row: dict[str, Any]) -> None:
+        if self.fail_events:
+            self.fail_events -= 1
+            raise RuntimeError("database unavailable")
         self.events.append(row)
 
 
-def _processor(tmp_path: Path, repository: FakeRepository, cameras: str | None = None):
+class Clock:
+    def __init__(self) -> None:
+        self.now = T0 + dt.timedelta(hours=1)
+
+    def __call__(self) -> dt.datetime:
+        return self.now
+
+
+def _processor(
+    tmp_path: Path,
+    repository: FakeRepository,
+    cameras: str | None = None,
+    clock: Clock | None = None,
+):
     settings = CollectorSettings(
         FLARE_CAMERAS=cameras, FLARE_CACHE_DIR=str(tmp_path), FLARE_IMAGE_TIMEZONE="UTC"
     )
@@ -184,8 +207,80 @@ def _processor(tmp_path: Path, repository: FakeRepository, cameras: str | None =
         repository,  # type: ignore[arg-type]
         ThermalBlobClassifier(),
         cache,
-        clock=lambda: T0 + dt.timedelta(hours=1),
+        clock=clock or Clock(),
     )
+
+
+TWO_FLARES = [
+    ("1577_20261123_120000.jpg", _scene(True, 1)),
+    ("1577_20261123_120500.jpg", _scene(True, 2)),
+]
+
+
+def test_failed_state_write_is_retried_even_though_the_images_are_known(
+    tmp_path: Path,
+) -> None:
+    repository = FakeRepository()
+    processor = _processor(tmp_path, repository, '{"1577": {"plant": "LNG Canada"}}')
+    processor.start()
+    repository.fail_state = 1
+
+    processor.process_batch(TWO_FLARES)
+    assert repository.states["1577"]["state"] == "unknown"  # the write failed
+
+    assert processor.process_batch(TWO_FLARES) == 0  # nothing new to process
+    assert repository.states["1577"]["state"] == "on"  # but the state was retried
+
+
+def test_failed_event_write_is_retried_once_without_duplicates(tmp_path: Path) -> None:
+    repository = FakeRepository()
+    processor = _processor(tmp_path, repository)
+    processor.start()
+    repository.fail_events = 1
+
+    processor.process_batch(TWO_FLARES)
+    assert repository.events == []
+
+    processor.flush()
+    processor.flush()
+    assert [event["state"] for event in repository.events] == ["on"]
+
+
+def test_missing_camera_survives_a_database_error_and_is_retried(
+    tmp_path: Path,
+) -> None:
+    repository = FakeRepository()
+    clock = Clock()
+    processor = _processor(tmp_path, repository, '{"1577": {}}', clock)
+    processor.start()
+    processor.process_batch(TWO_FLARES)
+    assert repository.states["1577"]["state"] == "on"
+
+    clock.now += dt.timedelta(minutes=31)
+    repository.fail_state = 1
+    repository.fail_events = 1
+    processor.check_missing()  # must not raise
+    assert repository.states["1577"]["state"] == "on"
+
+    processor.check_missing()
+    assert repository.states["1577"]["state"] == "unknown"
+    assert [event["state"] for event in repository.events] == ["on", "unknown"]
+
+
+def test_cameras_found_in_the_database_are_followed_without_a_camera_list(
+    tmp_path: Path,
+) -> None:
+    repository = FakeRepository()
+    repository.persisted = {"1577": {"camera_id": "1577", "state": "on", "since": T0}}
+    clock = Clock()
+    processor = _processor(tmp_path, repository, None, clock)
+    processor.start()
+
+    clock.now += dt.timedelta(minutes=31)
+    processor.check_missing()
+
+    assert repository.states["1577"]["state"] == "unknown"
+    assert repository.events[-1]["state"] == "unknown"
 
 
 def test_processor_skips_duplicates_and_unwatched_cameras(tmp_path: Path) -> None:
@@ -305,3 +400,72 @@ def test_report_needs_both_kinds_of_label_for_a_suggestion(tmp_path: Path) -> No
     report = evaluate(scan_images(tmp_path, ZoneInfo("UTC")), store)
 
     assert report["cameras"][0]["suggestion"] is None
+
+
+def test_report_keeps_plant_names_and_untuned_cameras_in_the_paste_ready_config(
+    tmp_path: Path,
+) -> None:
+    keys = _write_images(tmp_path)
+    store = LabelStore(tmp_path / "labels.json")
+    for position, key in enumerate(keys):
+        store.set_label(key, "flare" if position % 2 == 0 else "no_flare")
+    base = parse_cameras(
+        '{"1577": {"plant": "LNG Canada Flare"}, "1186": {"plant": "Cameron Trains 1 & 2"},'
+        ' "1209": {"plant": "Cameron Train 3", "roi": [0, 0, 0.5, 0.5]}}'
+    )
+
+    report = evaluate(scan_images(tmp_path, ZoneInfo("UTC")), store, base)
+
+    suggested = report["suggested_flare_cameras"]
+    assert set(suggested) == {"1577", "1186", "1209"}
+    assert suggested["1577"]["plant"] == "LNG Canada Flare"
+    assert "hot_delta" in suggested["1577"]  # tuned from the labels
+    assert suggested["1186"] == {"plant": "Cameron Trains 1 & 2"}  # left as it was
+    assert suggested["1209"]["roi"] == [0.0, 0.0, 0.5, 0.5]
+
+
+class FakeStateRepository:
+    def __init__(self, last_image_at: dt.datetime | None) -> None:
+        self.last_image_at = last_image_at
+
+    def ensure_tables(self) -> None: ...
+
+    def camera_states(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "camera_id": "1577",
+                "plant": "LNG Canada Flare",
+                "state": "on",
+                "since": T0,
+                "last_image_at": self.last_image_at,
+                "last_label": "flare",
+                "last_usable": True,
+                "last_score": 1.0,
+            }
+        ]
+
+    def camera_observations(self, since: dt.datetime) -> list[dict[str, Any]]:
+        return []
+
+    def recent_events(self, limit: int) -> list[dict[str, Any]]:
+        return []
+
+
+def test_api_reports_a_camera_with_no_recent_image_as_unknown() -> None:
+    now = T0 + dt.timedelta(hours=2)
+
+    def overview(last_image_at: dt.datetime | None):
+        service = FlareMonitorService(
+            FakeStateRepository(last_image_at),  # type: ignore[arg-type]
+            missing_minutes=30,
+            clock=lambda: now,
+        )
+        return service.overview(6).cameras[0]
+
+    fresh = overview(now - dt.timedelta(minutes=10))
+    assert fresh.state == "on" and not fresh.stale
+
+    stale = overview(now - dt.timedelta(minutes=45))
+    assert stale.state == "unknown" and stale.stale
+
+    assert overview(None).state == "unknown"
