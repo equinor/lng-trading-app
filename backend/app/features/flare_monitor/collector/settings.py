@@ -52,6 +52,9 @@ class CollectorSettings(BaseSettings):
     FLARE_UNUSABLE_REQUIRED: int = 3
     # Show the browser (local debugging only).
     FLARE_HEADED: bool = False
+    # Start Chromium without its own sandbox. Needed in a container that does not allow user
+    # namespaces (Radix); the container itself is non-root and only opens WoodMac.
+    FLARE_NO_SANDBOX: bool = False
 
     @field_validator("FLARE_IMAGE_TIMEZONE")
     @classmethod

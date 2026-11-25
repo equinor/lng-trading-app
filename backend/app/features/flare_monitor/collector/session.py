@@ -60,9 +60,12 @@ async def _open(
     settings: CollectorSettings,
     storage_state: Any,
 ) -> tuple[Browser, BrowserContext, Page]:
+    args = ["--disable-dev-shm-usage"]
+    if settings.FLARE_NO_SANDBOX:
+        args.append("--no-sandbox")
     browser = await playwright.chromium.launch(
         headless=not settings.FLARE_HEADED,
-        args=["--disable-dev-shm-usage"],
+        args=args,
     )
     context = await browser.new_context(storage_state=storage_state)
     page = await context.new_page()
