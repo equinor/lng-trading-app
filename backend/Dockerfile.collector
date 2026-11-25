@@ -24,8 +24,9 @@ RUN uv sync --frozen --no-dev --group collector --package app
 
 WORKDIR /app/backend/
 
-# The Playwright image provides this non-root user.
-RUN chown -R pwuser:pwuser /app
-USER pwuser
+# Radix runs containers as non-root and needs a numeric user id (a user name cannot be checked).
+RUN adduser --disabled-password --gecos "" --uid 1001 appuser \
+    && chown -R appuser:appuser /app
+USER 1001
 
 CMD ["python", "-m", "app.features.flare_monitor.collector"]

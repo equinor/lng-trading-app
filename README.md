@@ -728,6 +728,7 @@ lng-trading-app/
 | `FLARE_IMAGE_TIMEZONE` | `America/New_York` | Time zone of the timestamps in image names (collector only) |
 | `FLARE_POLL_SECONDS` / `FLARE_CACHE_HOURS` | `300` / `6` | How often the map is read, and how long cached images are kept (collector only) |
 | `FLARE_HOURS_BACK` | `1` | Hours of history the WoodMac dashboard loads on each read (collector only) |
+| `FLARE_NO_SANDBOX` | `false` | Start Chromium without its sandbox; set to `true` on Radix, where the container does not allow user namespaces (collector only) |
 | `SECRET_KEY` | random | JWT signing key |
 | `BACKEND_CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
 | `FIRST_SUPERUSER` | `admin@example.com` | Default admin user email |
