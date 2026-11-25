@@ -5,13 +5,9 @@ import { useEffect, useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  createAiOverview,
-  type Source,
-} from "@/features/pipeline_nominations/api"
+import { createAiOverview } from "@/features/pipeline_nominations/api"
 
 type Props = {
-  source: Source
   /** Selected facility::pipeline tokens; empty means everything. */
   selected: string[]
 }
@@ -47,43 +43,30 @@ function Overview({ text }: { text: string }) {
 
 /**
  * A model-written summary of the data in the current view. It is generated when the page loads
- * and again, once the filter settles, when the source or filter changes. The server caches each
+ * and again, once the filter settles, when the filter changes. The server caches each
  * summary for an hour, and Regenerate skips that cache.
  */
-export function AiOverview({ source, selected }: Props) {
+export function AiOverview({ selected }: Props) {
   const filterKey = selected.join("|")
-  const [settled, setSettled] = useState({ source, key: filterKey })
-  // After a source change the filter is already reset, so it is used straight away.
-  const active = settled.source === source ? settled.key : filterKey
-  const scope = `${source}|${active}`
-  // Regenerate clicks for one scope; a non-zero count asks the server to skip its cache.
+  const [active, setActive] = useState(filterKey)
+  // Regenerate clicks for one filter; a non-zero count asks the server to skip its cache.
   const [forced, setForced] = useState({ scope: "", count: 0 })
-  const refreshes = forced.scope === scope ? forced.count : 0
+  const refreshes = forced.scope === active ? forced.count : 0
 
   useEffect(() => {
-    const timer = setTimeout(
-      () => setSettled({ source, key: filterKey }),
-      FILTER_SETTLE_MS,
-    )
+    const timer = setTimeout(() => setActive(filterKey), FILTER_SETTLE_MS)
     return () => clearTimeout(timer)
-  }, [source, filterKey])
+  }, [filterKey])
 
   const query = useQuery({
-    queryKey: [
-      "pipeline_nominations",
-      "ai_overview",
-      source,
-      active,
-      refreshes,
-    ],
+    queryKey: ["pipeline_nominations", "ai_overview", active, refreshes],
     queryFn: () =>
-      createAiOverview(source, active ? active.split("|") : [], refreshes > 0),
+      createAiOverview(active ? active.split("|") : [], refreshes > 0),
     staleTime: ONE_HOUR,
     retry: false,
     refetchOnWindowFocus: false,
-    // Keep the last summary on screen while the next one loads, except across a source change.
-    placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[2] === source ? previous : undefined,
+    // Keep the last summary on screen while the next one loads.
+    placeholderData: (previous) => previous,
   })
   const result = query.data
   const waiting = active !== filterKey
@@ -108,7 +91,7 @@ export function AiOverview({ source, selected }: Props) {
           variant="outline"
           size="sm"
           loading={query.isFetching || waiting}
-          onClick={() => setForced({ scope, count: refreshes + 1 })}
+          onClick={() => setForced({ scope: active, count: refreshes + 1 })}
         >
           <RefreshCw /> Regenerate
         </LoadingButton>

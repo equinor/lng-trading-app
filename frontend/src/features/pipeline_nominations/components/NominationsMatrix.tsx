@@ -352,9 +352,9 @@ export function NominationsMatrix({
       </Table>
       {period === "cycle" && (
         <p className="text-xs text-muted-foreground">
-          Italic values were not published in that cycle, so the previous
+          Italic values were not re-posted in that cycle, so the previous
           cycle's nomination is shown. Cycles that have not happened yet are
-          blank. Greyed-out facilities have no cycle data.
+          blank. Post is the figure after the gas day has ended.
         </p>
       )}
       {hasPartial && latestDate && (

@@ -4,10 +4,8 @@ from app.features.pipeline_nominations.schemas import (
     MatrixCell,
     MatrixTable,
     OverviewResponse,
-    Source,
 )
 
-_SOURCE_NAMES = {"woodmac": "WoodMac Genscape", "platts": "Platts"}
 _MOVERS = 6
 _RECENT_MONTHS = 4
 
@@ -133,7 +131,7 @@ def _cycle_lines(table: MatrixTable) -> list[str]:
     indexes = [i for i, c in enumerate(table.columns) if c.group == day]
     labels = [table.columns[i].label for i in indexes]
     lines = [
-        f"Intraday cycles for gas day {day} (Timely, Evening, ID1 to ID3 final nominations):"
+        f"Intraday cycles for gas day {day} (Timely, Evening, ID1 to ID3 final nominations; Post is the after-day figure):"
     ]
     lines.append(
         "Total by cycle: "
@@ -163,20 +161,19 @@ def _cycle_lines(table: MatrixTable) -> list[str]:
         lines.append("Revision from first to latest published cycle, by facility:")
         lines.extend(r[1] for r in revisions[:_MOVERS])
     lines.append(
-        "Costa Azul and LNG Canada have no cycle data, so the cycle totals exclude them and are "
-        "lower than the daily totals. A cycle a location did not publish carries its previous value."
+        "A cycle a meter did not re-post carries its previous value. LNG Canada and Costa Azul come "
+        "from Platts, whose cycles are inferred from publish time; the other plants come from WoodMac."
     )
     return lines
 
 
 def build_prompt(
-    source: Source,
     overview: OverviewResponse,
     selection_names: list[str],
 ) -> str:
     """The instructions plus a compact text digest of the overview tables."""
     header = [
-        f"Source: {_SOURCE_NAMES[source]}. Latest gas day: {overview.latest_date}. "
+        f"Source: pipeline nominations (WoodMac Genscape, and Platts for LNG Canada and Costa Azul). Latest gas day: {overview.latest_date}. "
         "Unit: BCF per day (volumes are per day, including the monthly figures, which are "
         "averages per day).",
         "Scope: "
@@ -192,6 +189,6 @@ def build_prompt(
         _daily_lines(overview.daily_table),
         _pipeline_movers(overview.daily_table),
         _monthly_lines(overview.monthly_table),
-        _cycle_lines(overview.cycle_table) if source == "woodmac" else [],
+        _cycle_lines(overview.cycle_table),
     ]
     return PROMPT_INSTRUCTIONS + "\n\n".join("\n".join(s) for s in sections if s)

@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Literal
 
 from pydantic import BaseModel
-
-Source = Literal["platts", "woodmac"]
 
 
 class FacilityFilter(BaseModel):
@@ -77,7 +74,6 @@ class OverviewResponse(BaseModel):
     daily_180: list[DailySeries]
     monthly_table: MatrixTable
     daily_table: MatrixTable
-    # Only filled for the woodmac source, which publishes every nomination cycle.
     cycle_series: list[CycleSeries]
     cycle_table: MatrixTable
 

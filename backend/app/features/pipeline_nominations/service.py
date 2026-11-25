@@ -29,7 +29,6 @@ from app.features.pipeline_nominations.schemas import (
     MatrixTable,
     OverviewResponse,
     PipelineRow,
-    Source,
 )
 
 # The table is small and changes daily, so one cached snapshot serves every filter combination.
@@ -38,15 +37,21 @@ _SHORT_WINDOW_DAYS = 14
 _LONG_WINDOW_DAYS = 180
 _DAILY_TABLE_DAYS = 14
 
-# Nomination cycles in the order they happen within a gas day.
-_CYCLES = ("TI", "EV", "I1", "I2", "I3")
-_CYCLE_LABELS = {"TI": "Timely", "EV": "Evening", "I1": "ID1", "I2": "ID2", "I3": "ID3"}
+# Nomination cycles in the order they happen within a gas day. "PO" is the post-day figure that
+# the gold table adds once the gas day is over.
+_CYCLES = ("TI", "EV", "I1", "I2", "I3", "PO")
+_CYCLE_LABELS = {
+    "TI": "Timely",
+    "EV": "Evening",
+    "I1": "ID1",
+    "I2": "ID2",
+    "I3": "ID3",
+    "PO": "Post",
+}
 # The cycle data is refreshed from Databricks once an hour.
 _CYCLE_TTL = 3600.0
 _CYCLE_TABLE_DAYS = 3
 _CYCLE_CHART_DAYS = 7
-# Facilities that WoodMac does not cover; the WoodMac view takes their daily flow from Platts.
-_PLATTS_FACILITIES_IN_WOODMAC = frozenset({"Costa Azul LNG", "LNG Canada"})
 # Generated overviews are kept for an hour so repeated clicks do not call the model again.
 _AI_TTL = 3600.0
 
@@ -61,16 +66,6 @@ class _Flow:
     bcf: float
     cycle: str = ""
     carried: bool = False
-
-
-@dataclass(frozen=True)
-class _Nomination:
-    facility: str
-    pipeline: str
-    location_id: int
-    gas_day: dt.date
-    cycle: str
-    bcf: float
 
 
 def _month_key(flow: _Flow) -> str:
@@ -128,15 +123,12 @@ def _empty_table() -> MatrixTable:
 class PipelineNominationsService:
     def __init__(self, repo: PipelineNominationsRepository) -> None:
         self._repo = repo
-        self._flows: dict[Source, TTLCache[list[_Flow]]] = {
-            "platts": TTLCache(_TTL),
-            "woodmac": TTLCache(_TTL),
-        }
-        self._nominations: TTLCache[list[_Nomination]] = TTLCache(_CYCLE_TTL)
+        self._flows: TTLCache[list[_Flow]] = TTLCache(_TTL)
+        self._nominations: TTLCache[list[_Flow]] = TTLCache(_CYCLE_TTL)
         self._ai: dict[tuple, tuple[float, AiOverviewResponse]] = {}
         self._ai_lock = threading.Lock()
 
-    def _load(self, source: Source) -> list[_Flow]:
+    def _load(self) -> list[_Flow]:
         def loader() -> list[_Flow]:
             return [
                 _Flow(
@@ -146,39 +138,31 @@ class PipelineNominationsService:
                     # Adding 0.0 turns -0.0 into 0.0.
                     bcf=float(row["bcf"] or 0.0) + 0.0,
                 )
-                for row in self._repo.daily_by_pipeline(source)
+                for row in self._repo.daily_by_pipeline()
             ]
 
-        flows = self._flows[source].get_or_load(loader)
-        if source == "woodmac" and flows:
-            # Not in the WoodMac table, so their daily numbers come from Platts. Days after
-            # WoodMac's last day are dropped so the latest date and the columns stay WoodMac's.
-            last = max(f.day for f in flows)
-            flows = flows + [
-                f
-                for f in self._load("platts")
-                if f.facility in _PLATTS_FACILITIES_IN_WOODMAC and f.day <= last
-            ]
-        return flows
+        return self._flows.get_or_load(loader)
 
-    def _load_nominations(self) -> list[_Nomination]:
-        def loader() -> list[_Nomination]:
+    def _load_nominations(self) -> list[_Flow]:
+        """One flow per plant, pipeline, gas day and cycle, flagged when a meter was carried."""
+
+        def loader() -> list[_Flow]:
             return [
-                _Nomination(
+                _Flow(
                     facility=row["facility"],
                     pipeline=row["pipeline"] or "Unknown",
-                    location_id=int(row["location_id"] or 0),
-                    gas_day=row["gas_day"],
-                    cycle=row["cycle"],
+                    day=row["gas_day"],
                     bcf=float(row["bcf"] or 0.0) + 0.0,
+                    cycle=row["cycle"],
+                    carried=bool(row["carried"]),
                 )
                 for row in self._repo.woodmac_cycle_rows()
             ]
 
         return self._nominations.get_or_load(loader)
 
-    def filters(self, source: Source) -> FiltersResponse:
-        flows = self._load(source)
+    def filters(self) -> FiltersResponse:
+        flows = self._load()
         pipelines: dict[str, set[str]] = defaultdict(set)
         for flow in flows:
             pipelines[flow.facility].add(flow.pipeline)
@@ -190,8 +174,8 @@ class PipelineNominationsService:
             ],
         )
 
-    def overview(self, source: Source, selection: Selection) -> OverviewResponse:
-        flows = self._load(source)
+    def overview(self, selection: Selection) -> OverviewResponse:
+        flows = self._load()
         if not flows:
             return OverviewResponse(
                 latest_date=None,
@@ -210,9 +194,7 @@ class PipelineNominationsService:
         chosen = [
             f for f in flows if not selection or (f.facility, f.pipeline) in selection
         ]
-        cycle_series, cycle_table = (
-            self._cycles(selection) if source == "woodmac" else ([], _empty_table())
-        )
+        cycle_series, cycle_table = self._cycles(selection)
         return OverviewResponse(
             latest_date=latest,
             daily_14=self._daily(chosen, latest, _SHORT_WINDOW_DAYS),
@@ -228,17 +210,17 @@ class PipelineNominationsService:
         )
 
     def ai_overview(
-        self, source: Source, selection: Selection, refresh: bool = False
+        self, selection: Selection, refresh: bool = False
     ) -> AiOverviewResponse:
         """A short written summary of the overview data, generated by the serving endpoint."""
-        overview = self.overview(source, selection)
+        overview = self.overview(selection)
         names = sorted(f"{facility} / {pipeline}" for facility, pipeline in selection)
-        key = (source, tuple(names), overview.latest_date)
+        key = (tuple(names), overview.latest_date)
         with self._ai_lock:
             cached = self._ai.get(key)
             if cached and not refresh and time.monotonic() - cached[0] < _AI_TTL:
                 return cached[1]
-            text = self._repo.ai_overview(build_prompt(source, overview, names))
+            text = self._repo.ai_overview(build_prompt(overview, names))
             if not text:
                 raise RuntimeError("The model returned no text")
             result = AiOverviewResponse(
@@ -251,16 +233,15 @@ class PipelineNominationsService:
             return result
 
     def _cycles(self, selection: Selection) -> tuple[list[CycleSeries], MatrixTable]:
-        """The final nomination of each cycle (Timely, Evening, ID1 to ID3) for the latest gas days."""
-        nominations = self._load_nominations()
-        if not nominations:
+        """The final nomination of each cycle (Timely, Evening, ID1 to ID3, Post) for the latest gas days."""
+        flows = self._load_nominations()
+        if not flows:
             return [], _empty_table()
 
-        flows = self._cycle_flows(nominations)
         chosen = [
             f for f in flows if not selection or (f.facility, f.pipeline) in selection
         ]
-        gas_days = sorted({n.gas_day for n in nominations})
+        gas_days = sorted({f.day for f in flows})
         columns = [
             ColumnMeta(
                 key=f"{day.isoformat()}-{cycle}",
@@ -281,37 +262,6 @@ class PipelineNominationsService:
                 change_within_group=True,
             ),
         )
-
-    @staticmethod
-    def _cycle_flows(nominations: list[_Nomination]) -> list[_Flow]:
-        """One flow per location, gas day and cycle.
-
-        A location does not publish every cycle. Where it skipped one that did happen for other
-        locations that day, its previous nomination still stands, so it is carried forward and
-        flagged. Cycles that have not happened yet stay empty.
-        """
-        reached: dict[dt.date, int] = {}
-        published: dict[tuple[str, str, int, dt.date], dict[str, float]] = defaultdict(
-            dict
-        )
-        for n in nominations:
-            reached[n.gas_day] = max(reached.get(n.gas_day, -1), _CYCLES.index(n.cycle))
-            published[(n.facility, n.pipeline, n.location_id, n.gas_day)][n.cycle] = (
-                n.bcf
-            )
-
-        flows: list[_Flow] = []
-        for (facility, pipeline, _, gas_day), by_cycle in published.items():
-            current: float | None = None
-            for cycle in _CYCLES[: reached[gas_day] + 1]:
-                carried = cycle not in by_cycle
-                if not carried:
-                    current = by_cycle[cycle]
-                if current is not None:
-                    flows.append(
-                        _Flow(facility, pipeline, gas_day, current, cycle, carried)
-                    )
-        return flows
 
     @staticmethod
     def _cycle_series(flows: list[_Flow], gas_days: list[dt.date]) -> list[CycleSeries]:
