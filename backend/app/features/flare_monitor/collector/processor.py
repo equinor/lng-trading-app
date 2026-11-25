@@ -59,6 +59,7 @@ class FlareProcessor:
         self._persisted: dict[str, dict[str, Any]] = {}
         self._pending: list[dict[str, Any]] = []
         self._dirty: set[str] = set()
+        self._events: list[StateEvent] = []
 
     def start(self) -> None:
         """Create the tables and pick up where the previous run left off."""
@@ -70,11 +71,14 @@ class FlareProcessor:
             self._newest[camera_id] = max(
                 self._newest.get(camera_id, taken_at), taken_at
             )
-        for camera_id in self._cameras:
-            tracker = self._tracker(camera_id)
+        # With no camera list every camera that has a stored state is followed, so one that stops
+        # publishing is still marked unknown.
+        for camera_id in self._cameras or self._persisted:
+            self._tracker(camera_id)
             self._last_arrival.setdefault(camera_id, now)
             if camera_id not in self._persisted:
-                self._save_state(tracker)
+                self._dirty.add(camera_id)
+        self.flush()
 
     def process_batch(self, images: list[tuple[str, bytes]]) -> int:
         """Handle the images found on one map load, oldest first. Returns how many were new."""
@@ -87,8 +91,6 @@ class FlareProcessor:
         self._check_age(parsed[-1][0].taken_at if parsed else None)
 
         new = 0
-        self._pending = []
-        self._dirty = set()
         for image_name, data in parsed:
             try:
                 new += self._handle(
@@ -99,7 +101,7 @@ class FlareProcessor:
                 )
             except Exception:
                 logger.exception("Could not process %s", image_name.file_name)
-        self._flush()
+        self.flush()
         return new
 
     def _check_age(self, newest: dt.datetime | None) -> None:
@@ -117,21 +119,40 @@ class FlareProcessor:
         else:
             logger.info("Newest image is %s min old", minutes)
 
-    def _flush(self) -> None:
-        """Write the batch in a few statements. On failure the images are retried next load."""
+    def flush(self) -> None:
+        """Write what is waiting: observations, then camera states, then events.
+
+        Observations are retried by reading the same images again. State writes and events are
+        remembered until they succeed, because the trackers have already moved on and reading an
+        image again cannot recreate them.
+        """
         pending, self._pending = self._pending, []
-        try:
-            if pending:
+        if pending:
+            try:
                 self._repository.add_observations(pending)
-            for camera_id in self._dirty:
+            except Exception:
+                logger.exception("Could not store %s observation(s)", len(pending))
+                for row in pending:
+                    self._seen.discard((row["camera_id"], row["image_ts"]))
+                self._last_hash.clear()
+
+        for camera_id in sorted(self._dirty):
+            try:
                 self._save_state(self._tracker(camera_id))
-        except Exception:
-            logger.exception("Could not store %s observation(s)", len(pending))
-            for row in pending:
-                self._seen.discard((row["camera_id"], row["image_ts"]))
-            self._last_hash.clear()
-        finally:
-            self._dirty = set()
+                self._dirty.discard(camera_id)
+            except Exception:
+                logger.exception("Could not save the state of camera %s", camera_id)
+
+        unsaved = []
+        for event in self._events:
+            try:
+                self._save_event(event)
+            except Exception:
+                logger.exception(
+                    "Could not save an event for camera %s", event.camera_id
+                )
+                unsaved.append(event)
+        self._events = unsaved
 
     def check_missing(self) -> None:
         """A camera with no new image for a while is unknown, not off."""
@@ -144,8 +165,9 @@ class FlareProcessor:
             event = tracker.missing(now)
             if event is not None:
                 logger.warning("Camera %s: %s", camera_id, event.reason)
-                self._save_state(tracker)
-                self._save_event(event)
+                self._dirty.add(camera_id)
+                self._events.append(event)
+        self.flush()
 
     def _handle(
         self, camera_id: str, file_name: str, taken_at: dt.datetime, data: bytes
@@ -208,7 +230,7 @@ class FlareProcessor:
                 event.previous.value,
                 event.state.value,
             )
-            self._save_event(event)
+            self._events.append(event)
         return 1
 
     def _tracker(self, camera_id: str) -> CameraTracker:

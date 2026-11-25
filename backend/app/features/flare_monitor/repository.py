@@ -122,8 +122,18 @@ class FlareMonitorRepository:
         )
 
     def add_event(self, row: dict[str, Any]) -> None:
+        """Insert a state change once; writing the same event again does nothing."""
         exec_one(
-            f"INSERT INTO {self.events} VALUES (?, ?, ?, ?, ?, ?, ?)",
+            f"""
+            MERGE INTO {self.events} AS t
+            USING (
+                SELECT ? AS camera_id, ? AS plant, ? AS event_ts, ? AS previous_state,
+                       ? AS state, ? AS alert, ? AS reason
+            ) AS s
+            ON t.camera_id = s.camera_id AND t.event_ts = s.event_ts
+               AND t.previous_state = s.previous_state AND t.state = s.state
+            WHEN NOT MATCHED THEN INSERT *
+            """,
             [
                 row["camera_id"],
                 row.get("plant"),

@@ -64,7 +64,7 @@ export function CameraCard({ camera, timeline, hours, now }: Props) {
         <div
           className="flex h-6 items-stretch gap-px overflow-hidden rounded"
           role="img"
-          aria-label={`Image readings for the last ${hours} hours`}
+          aria-label={`Image readings for the last ${hours} hours, also listed below`}
         >
           {points.length === 0 ? (
             <div className="flex-1 bg-muted" />
@@ -81,6 +81,19 @@ export function CameraCard({ camera, timeline, hours, now }: Props) {
         <p className="mt-1 text-[11px] text-muted-foreground">
           Last {hours} hours, oldest on the left. One tile per image.
         </p>
+        <details className="mt-1 text-xs">
+          <summary className="cursor-pointer text-muted-foreground">
+            Readings as a list ({points.length})
+          </summary>
+          <ol className="mt-1 max-h-40 overflow-auto">
+            {[...points].reverse().map((point) => (
+              <li key={point.image_ts}>
+                {formatTime(point.image_ts)}:{" "}
+                {tileText(point.label, point.usable)}
+              </li>
+            ))}
+          </ol>
+        </details>
       </div>
     </article>
   )

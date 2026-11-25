@@ -10,6 +10,8 @@ class CameraStatus(BaseModel):
     plant: str | None
     # "on", "off" or "unknown". Unknown covers obstructed cameras and missing images.
     state: str
+    # True when no image has arrived recently (or ever), so the stored state is shown as unknown.
+    stale: bool
     since: dt.datetime | None
     last_image_at: dt.datetime | None
     # What the latest image looked like: flare, no_flare or uncertain.

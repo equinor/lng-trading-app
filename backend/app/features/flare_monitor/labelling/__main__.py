@@ -14,8 +14,9 @@ import json
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from app.features.flare_monitor.collector.settings import CollectorSettings
 from app.features.flare_monitor.labelling.evaluate import evaluate
-from app.features.flare_monitor.labelling.images import scan_images
+from app.features.flare_monitor.labelling.images import LabelImage, scan_images
 from app.features.flare_monitor.labelling.server import LabellingApp, serve
 from app.features.flare_monitor.labelling.store import LabelStore
 
@@ -34,16 +35,26 @@ def main() -> None:
     args = parser.parse_args()
 
     tz = ZoneInfo(args.timezone)
-    images = scan_images(args.images, tz)
+    base = CollectorSettings().cameras()
+
+    def scan() -> list[LabelImage]:
+        # Only the tracked cameras are shown for labelling.
+        return [
+            image
+            for image in scan_images(args.images, tz)
+            if not base or image.camera_id in base
+        ]
+
+    images = scan()
     if not images:
         raise SystemExit(f"No camera images found under {args.images.resolve()}")
     store = LabelStore(args.labels)
 
     if args.command == "serve":
-        serve(LabellingApp(lambda: scan_images(args.images, tz), store), args.port)
+        serve(LabellingApp(scan, store, base), args.port)
         return
 
-    result = evaluate(images, store)
+    result = evaluate(images, store, base)
     for camera in result["cameras"]:
         print(  # noqa: T201
             f"Camera {camera['camera_id']}: {camera['labelled']} labelled "

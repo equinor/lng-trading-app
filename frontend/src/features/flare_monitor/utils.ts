@@ -31,6 +31,9 @@ export function tileText(label: FlareLabel, usable: boolean): string {
 }
 
 export function stateText(camera: CameraStatus): string {
+  if (camera.stale) {
+    return "No recent image, so the state is unknown"
+  }
   if (camera.state === "unknown") {
     return "Obstructed, no recent image or not yet confirmed"
   }

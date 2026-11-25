@@ -87,7 +87,11 @@ def _suggest(samples: list[_Sample], config: CameraConfig) -> tuple[CameraConfig
     return best[1], best[2]
 
 
-def evaluate(images: list[LabelImage], store: LabelStore) -> dict[str, Any]:
+def evaluate(
+    images: list[LabelImage],
+    store: LabelStore,
+    base: dict[str, CameraConfig] | None = None,
+) -> dict[str, Any]:
     """Compare the rule with the labels, per camera, and suggest better thresholds."""
     by_camera: dict[str, list[_Sample]] = {}
     for image in images:
@@ -99,9 +103,9 @@ def evaluate(images: list[LabelImage], store: LabelStore) -> dict[str, Any]:
         )
 
     cameras = []
-    suggested: dict[str, dict[str, Any]] = {}
+    tuned: dict[str, dict[str, Any]] = {}
     for camera_id, samples in sorted(by_camera.items()):
-        config = store.camera_config(camera_id)
+        config = camera_config(camera_id, store, base)
         counts = _score(samples, config)
         truths = [sample.truth for sample in samples]
         report: dict[str, Any] = {
@@ -123,8 +127,7 @@ def evaluate(images: list[LabelImage], store: LabelStore) -> dict[str, Any]:
                 "max_clear_pixels": best.max_clear_pixels,
                 "accuracy": round(correct / len(samples), 3),
             }
-            suggested[camera_id] = {
-                "roi": list(best.roi),
+            tuned[camera_id] = {
                 "hot_delta": best.hot_delta,
                 "min_pixels": best.min_pixels,
                 "max_clear_pixels": best.max_clear_pixels,
@@ -132,7 +135,47 @@ def evaluate(images: list[LabelImage], store: LabelStore) -> dict[str, Any]:
         else:
             report["note"] = "Label both flare and no-flare images to get a suggestion."
         cameras.append(report)
+    return {
+        "cameras": cameras,
+        "suggested_flare_cameras": merge_cameras(base or {}, store, tuned),
+    }
+
+
+def camera_config(
+    camera_id: str, store: LabelStore, base: dict[str, CameraConfig] | None
+) -> CameraConfig:
+    """The camera as configured today, with the region drawn in the labelling tool on top."""
+    config = (base or {}).get(camera_id, CameraConfig())
+    region = store.cameras.get(camera_id, {}).get("roi")
+    if region:
+        left, top, right, bottom = region
+        config = dataclasses.replace(config, roi=(left, top, right, bottom))
+    return config
+
+
+def _entry(config: CameraConfig) -> dict[str, Any]:
+    """The FLARE_CAMERAS entry for a camera, leaving out values that are the defaults."""
+    default = CameraConfig()
+    entry: dict[str, Any] = {}
+    if config.plant:
+        entry["plant"] = config.plant
+    if config.roi != default.roi:
+        entry["roi"] = list(config.roi)
+    for name in ("hot_delta", "min_pixels", "max_clear_pixels"):
+        if getattr(config, name) != getattr(default, name):
+            entry[name] = getattr(config, name)
+    return entry
+
+
+def merge_cameras(
+    base: dict[str, CameraConfig], store: LabelStore, tuned: dict[str, dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    """The paste-ready FLARE_CAMERAS value: every configured camera, keeping its plant name
+    and anything not tuned, with the regions and thresholds found here laid on top."""
+    merged = {camera_id: _entry(config) for camera_id, config in base.items()}
     for camera_id, entry in store.cameras.items():
-        if entry.get("roi") and camera_id not in suggested:
-            suggested[camera_id] = {"roi": entry["roi"]}
-    return {"cameras": cameras, "suggested_flare_cameras": suggested}
+        if entry.get("roi"):
+            merged.setdefault(camera_id, {})["roi"] = list(entry["roi"])
+    for camera_id, values in tuned.items():
+        merged.setdefault(camera_id, {}).update(values)
+    return merged
