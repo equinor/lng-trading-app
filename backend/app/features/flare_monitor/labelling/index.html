@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Flare labelling</title>
+<style>
+  :root { color-scheme: light; font-family: system-ui, sans-serif; }
+  body { margin: 0; display: grid; grid-template-columns: 17rem 1fr; height: 100vh; }
+  aside { border-right: 1px solid #ddd; padding: 1rem; overflow: auto; display: flex; flex-direction: column; gap: .75rem; font-size: .85rem; }
+  main { padding: 1rem; display: flex; flex-direction: column; gap: .75rem; overflow: auto; }
+  h1 { font-size: 1rem; margin: 0; }
+  select, button { font: inherit; padding: .35rem .6rem; }
+  button { cursor: pointer; border: 1px solid #bbb; background: #fff; border-radius: 6px; }
+  button.on { outline: 2px solid #111; }
+  .stage { position: relative; display: inline-block; align-self: flex-start; background: #000; }
+  .stage img { display: block; max-width: min(100%, 960px); max-height: 62vh; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+  .buttons { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .flare { background: #ffedd5; } .no_flare { background: #d1fae5; }
+  .unsure { background: #e5e7eb; } .unusable { background: #fef3c7; }
+  .muted { color: #666; } kbd { background: #eee; border-radius: 3px; padding: 0 .3rem; }
+  table { border-collapse: collapse; width: 100%; } td, th { text-align: left; padding: .2rem .4rem; border-bottom: 1px solid #eee; }
+  pre { background: #f6f6f6; padding: .5rem; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Flare labelling</h1>
+  <label>Camera <select id="camera"></select></label>
+  <label>Show
+    <select id="filter">
+      <option value="unlabelled">Unlabelled only</option>
+      <option value="all">All images</option>
+      <option value="labelled">Labelled only</option>
+    </select>
+  </label>
+  <div id="progress" class="muted"></div>
+  <label><input type="checkbox" id="guess"> Show the rule's guess (off keeps you unbiased)</label>
+  <hr>
+  <div>
+    <b>Flare region</b><br>
+    <span class="muted">Drag on the image to mark where the flare appears. Leave out stacks and towers that always glow.</span><br>
+    <button id="clearRoi">Clear region</button>
+  </div>
+  <hr>
+  <button id="report">Check the rule against my labels</button>
+  <div id="reportOut"></div>
+  <hr>
+  <div class="muted">
+    <kbd>F</kbd> flare &nbsp; <kbd>N</kbd> no flare<br>
+    <kbd>U</kbd> unsure &nbsp; <kbd>X</kbd> obstructed / unusable<br>
+    <kbd>&larr;</kbd> <kbd>&rarr;</kbd> move &nbsp; <kbd>Backspace</kbd> clear label
+  </div>
+</aside>
+<main>
+  <div id="title" class="muted"></div>
+  <div class="stage" id="stage">
+    <img id="img" alt="Camera image">
+    <canvas id="overlay"></canvas>
+  </div>
+  <div class="buttons" id="buttons"></div>
+  <div id="guessOut" class="muted"></div>
+</main>
+<script>
+const LABELS = [
+  ["flare", "Flare (F)"], ["no_flare", "No flare (N)"],
+  ["unsure", "Unsure (U)"], ["unusable", "Obstructed / unusable (X)"],
+];
+let data = { images: [], cameras: {} };
+let list = [];
+let index = 0;
+const $ = (id) => document.getElementById(id);
+
+async function post(path, body) {
+  const res = await fetch(path, { method: "POST", body: JSON.stringify(body) });
+  if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+}
+
+async function load() {
+  const previous = $("camera").value;
+  data = await (await fetch("/api/state")).json();
+  const cameras = [...new Set(data.images.map((i) => i.camera))];
+  $("camera").replaceChildren(...cameras.map((c) => new Option(`Camera ${c}`, c)));
+  if (cameras.includes(previous)) $("camera").value = previous;
+  refresh(0);
+}
+
+function refresh(keep) {
+  const camera = $("camera").value;
+  const filter = $("filter").value;
+  const mine = data.images.filter((i) => i.camera === camera);
+  list = mine.filter((i) =>
+    filter === "all" ? true : filter === "labelled" ? i.label : !i.label);
+  index = Math.min(Math.max(keep, 0), Math.max(list.length - 1, 0));
+  const done = mine.filter((i) => i.label).length;
+  $("progress").textContent = `${done} of ${mine.length} labelled`;
+  show();
+}
+
+function current() { return list[index]; }
+
+async function show() {
+  const item = current();
+  $("guessOut").textContent = "";
+  if (!item) {
+    $("img").removeAttribute("src");
+    $("title").textContent = "Nothing to show with this filter.";
+    $("buttons").replaceChildren();
+    draw();
+    return;
+  }
+  $("img").src = `/image?key=${encodeURIComponent(item.key)}`;
+  $("title").textContent =
+    `${index + 1} / ${list.length}   ${item.key}   ${new Date(item.taken_at).toLocaleString()}`;
+  $("buttons").replaceChildren(...LABELS.map(([value, text]) => {
+    const b = document.createElement("button");
+    b.textContent = text;
+    b.className = `${value}${item.label === value ? " on" : ""}`;
+    b.onclick = () => setLabel(value);
+    return b;
+  }));
+  if ($("guess").checked) {
+    const g = await (await fetch(`/api/guess?key=${encodeURIComponent(item.key)}`)).json();
+    $("guessOut").textContent =
+      `Rule's guess: ${g.label} (${g.hot_pixels} hot pixels, peak +${g.peak_delta})`;
+  }
+}
+
+let busy = false;
+async function setLabel(label) {
+  const item = current();
+  if (!item || busy) return;
+  busy = true;
+  try {
+    await post("/api/label", { key: item.key, label });
+    item.label = label;
+    const next = $("filter").value === "unlabelled" ? index : index + 1;
+    refresh(next);
+  } finally {
+    busy = false;
+  }
+}
+
+async function clearLabel() {
+  const item = current();
+  if (!item || !item.label || busy) return;
+  busy = true;
+  try {
+    await post("/api/label", { key: item.key, label: null });
+    item.label = null;
+    refresh(index);
+  } finally {
+    busy = false;
+  }
+}
+
+function draw(live) {
+  const canvas = $("overlay");
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const roi = live || (data.cameras[$("camera").value] || {}).roi;
+  if (!roi) return;
+  const [l, t, r, b] = roi;
+  ctx.strokeStyle = "#22d3ee";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeRect(l * canvas.width, t * canvas.height, (r - l) * canvas.width, (b - t) * canvas.height);
+}
+
+let dragStart = null;
+function fraction(event) {
+  const box = $("overlay").getBoundingClientRect();
+  return [
+    Math.min(Math.max((event.clientX - box.left) / box.width, 0), 1),
+    Math.min(Math.max((event.clientY - box.top) / box.height, 0), 1),
+  ];
+}
+function rect(a, b) {
+  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+}
+$("overlay").addEventListener("mousedown", (e) => { dragStart = fraction(e); });
+$("overlay").addEventListener("mousemove", (e) => { if (dragStart) draw(rect(dragStart, fraction(e))); });
+window.addEventListener("mouseup", async (e) => {
+  if (!dragStart) return;
+  const roi = rect(dragStart, fraction(e));
+  dragStart = null;
+  const camera = $("camera").value;
+  try {
+    await post("/api/roi", { camera, roi });
+    data.cameras[camera] = { ...(data.cameras[camera] || {}), roi };
+  } catch (error) { alert(error.message); }
+  draw();
+});
+$("clearRoi").onclick = async () => {
+  const camera = $("camera").value;
+  await post("/api/roi", { camera, roi: null });
+  if (data.cameras[camera]) delete data.cameras[camera].roi;
+  draw();
+};
+
+let failedKey = null;
+$("img").addEventListener("error", async () => {
+  const item = current();
+  if (!item) return;
+  if (failedKey === item.key) {
+    $("title").textContent = `${item.key} cannot be loaded`;
+    return;
+  }
+  // The file was probably deleted or moved; reload the list from the folder once.
+  failedKey = item.key;
+  await load();
+});
+$("img").addEventListener("load", () => { failedKey = null; draw(); });
+window.addEventListener("resize", () => draw());
+$("camera").onchange = () => refresh(0);
+$("filter").onchange = () => refresh(0);
+$("guess").onchange = show;
+
+$("report").onclick = async () => {
+  const out = $("reportOut");
+  out.textContent = "Working...";
+  const result = await (await fetch("/api/report")).json();
+  const table = document.createElement("table");
+  table.innerHTML = "<tr><th>Cam</th><th>Labels</th><th>Agrees</th><th>Missed</th><th>False</th></tr>";
+  for (const c of result.cameras) {
+    const row = table.insertRow();
+    [c.camera_id, c.labelled, `${Math.round(c.accuracy * 100)}%`, c.missed_flares, c.false_flares]
+      .forEach((v) => { row.insertCell().textContent = v; });
+    if (c.suggestion) {
+      const s = table.insertRow().insertCell();
+      s.colSpan = 5;
+      s.className = "muted";
+      s.textContent = `Best thresholds: hot_delta ${c.suggestion.hot_delta}, min_pixels ${c.suggestion.min_pixels} (${Math.round(c.suggestion.accuracy * 100)}%)` +
+        (c.enough_labels ? "" : " - too few labels to trust");
+    } else if (c.note) {
+      const s = table.insertRow().insertCell();
+      s.colSpan = 5; s.className = "muted"; s.textContent = c.note;
+    }
+  }
+  const pre = document.createElement("pre");
+  pre.textContent = JSON.stringify(result.suggested_flare_cameras);
+  out.replaceChildren(table, document.createTextNode("FLARE_CAMERAS suggestion:"), pre);
+};
+
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "SELECT" || e.metaKey || e.ctrlKey) return;
+  const key = e.key.toLowerCase();
+  if (key === "f") setLabel("flare");
+  else if (key === "n") setLabel("no_flare");
+  else if (key === "u") setLabel("unsure");
+  else if (key === "x") setLabel("unusable");
+  else if (key === "backspace") clearLabel();
+  else if (e.key === "ArrowRight") { index = Math.min(index + 1, list.length - 1); show(); }
+  else if (e.key === "ArrowLeft") { index = Math.max(index - 1, 0); show(); }
+});
+
+load();
+</script>
+</body>
+</html>

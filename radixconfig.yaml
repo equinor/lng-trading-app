@@ -1,7 +1,7 @@
 apiVersion: radix.equinor.com/v1
 kind: RadixApplication
 metadata:
-  name: lng-fundamentals-app
+  name: lng-trading-app
 spec:
   build:
     useBuildKit: true
@@ -28,13 +28,12 @@ spec:
         - DATABRICKS_WORKSPACE_RESOURCE_ID
       variables:
         NEWS_TABLE: ms_vulcan_gplng_plab.trader_news_app.platts_lng_top_news
-        PIPELINE_NOMINATIONS_PLATTS_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data
-        PIPELINE_NOMINATIONS_WOODMAC_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles
-        PIPELINE_NOMINATIONS_WOODMAC_CYCLES_TABLE: ms_vulcan_gplng_plab.fundamentals_bronze.wm_genscape_pipeline_all_cycles
+        PIPELINE_NOMINATIONS_GOLD_TABLE: ms_vulcan_gplng_plab.fundamentals_gold.us_lng_feedgas_tracking
         LNG_BALANCE_SUPPLY_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply_latest
         LNG_BALANCE_DEMAND_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand_latest
         LNG_BALANCE_SUPPLY_HISTORY_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply
         LNG_BALANCE_DEMAND_HISTORY_TABLE: ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand
+        FLARE_MONITOR_SCHEMA: ms_vulcan_gplng_plab.trader_news_app
         DATABRICKS_USE_SERVICE_PRINCIPAL: "true"
         DATABRICKS_WORKSPACE_URL: adb-1023210238843247.7.azuredatabricks.net
         DATABRICKS_JOB_ID: "93951735174333"
@@ -58,6 +57,36 @@ spec:
             path: /api/v1/utils/health-check
           initialDelaySeconds: 10
           periodSeconds: 10
+
+    - name: flare-collector
+      # Background worker with no port: signs in to WoodMac, classifies the flare camera images
+      # and writes the observations to Databricks.
+      src: "."
+      dockerfileName: backend/Dockerfile.collector
+      replicas: 1
+      secrets:
+        - DATABRICKS_SERVER_HOSTNAME
+        - DATABRICKS_HTTP_PATH
+        - DATABRICKS_TENANT_ID
+        - DATABRICKS_CLIENT_ID
+        - DATABRICKS_CLIENT_SECRET
+        - DATABRICKS_WORKSPACE_RESOURCE_ID
+        - WOODMAC_USERNAME
+        - WOODMAC_PASSWORD
+        - WOODMAC_STORAGE_STATE
+      variables:
+        DATABRICKS_USE_SERVICE_PRINCIPAL: "true"
+        FLARE_MONITOR_SCHEMA: ms_vulcan_gplng_plab.trader_news_app
+        FLARE_IMAGE_TIMEZONE: America/New_York
+        FLARE_CACHE_HOURS: "6"
+        # Cameras to track: image camera ID, WoodMac camera name and flare region. Empty tracks every camera.
+        FLARE_CAMERAS: '{"1209": {"plant": "Cameron Train 3"}, "1186": {"plant": "Cameron Trains 1 & 2"}, "1222": {"plant": "Corpus Christi Trains 1, 2, & 3"}, "1575": {"plant": "Corpus Christi Trains 4, 5, 6, 7"}, "1576": {"plant": "Corpus Christi Trains 7, 8, 9, & 10"}, "1093": {"plant": "Cove Point Train"}, "1597": {"plant": "Golden Pass Train 1"}, "1571": {"plant": "LNG Canada Train 1"}, "1577": {"plant": "LNG Canada Flare", "roi": [0, 0, 0.4, 0.55]}, "1559": {"plant": "Plaquemines Power 1"}, "1611": {"plant": "Plaquemines Power 2"}, "1211": {"plant": "Sabine Pass Trains 5 & 6"}, "858": {"plant": "Sabine Trains 1 & 2"}, "703": {"plant": "Sabine Trains 3 & 4"}}'
+      resources:
+        requests:
+          cpu: "250m"
+          memory: "1024Mi"
+        limits:
+          memory: "2048Mi"
 
     - name: frontend
       src: "."
