@@ -19,6 +19,12 @@ _EVENTS = """
     camera_id STRING, plant STRING, event_ts TIMESTAMP, previous_state STRING, state STRING,
     alert BOOLEAN, reason STRING
 """
+# One row holding the WoodMac login token the collector uses. It is a credential: restrict who
+# can read this table.
+_TOKEN = """
+    id STRING, access_token STRING, expires_at TIMESTAMP, updated_at TIMESTAMP, updated_by STRING
+"""
+_TOKEN_ID = "woodmac"
 
 
 def _utc(value: dt.datetime) -> dt.datetime:
@@ -35,14 +41,48 @@ class FlareMonitorRepository:
         self.observations = f"{schema}.flare_observations"
         self.state = f"{schema}.flare_camera_state"
         self.events = f"{schema}.flare_events"
+        self.token = f"{schema}.flare_api_token"
 
     def ensure_tables(self) -> None:
         for table, columns in (
             (self.observations, _OBSERVATIONS),
             (self.state, _STATE),
             (self.events, _EVENTS),
+            (self.token, _TOKEN),
         ):
             exec_one(f"CREATE TABLE IF NOT EXISTS {table} ({columns})")
+
+    # --- WoodMac login token (published from a signed-in machine, read by the collector) ---
+
+    def save_token(
+        self, access_token: str, expires_at: dt.datetime, updated_by: str
+    ) -> None:
+        exec_one(
+            f"""
+            MERGE INTO {self.token} AS t
+            USING (
+                SELECT ? AS id, ? AS access_token, ? AS expires_at, ? AS updated_at,
+                       ? AS updated_by
+            ) AS s
+            ON t.id = s.id
+            WHEN MATCHED THEN UPDATE SET *
+            WHEN NOT MATCHED THEN INSERT *
+            """,
+            [
+                _TOKEN_ID,
+                access_token,
+                _utc(expires_at),
+                _utc(dt.datetime.now(dt.timezone.utc)),
+                updated_by,
+            ],
+        )
+
+    def load_token(self) -> dict[str, Any] | None:
+        rows = fetch_all(
+            f"SELECT access_token, expires_at, updated_at FROM {self.token} WHERE id = ?",
+            [_TOKEN_ID],
+        )
+        return rows[0] if rows else None
 
     # --- collector writes ---
 

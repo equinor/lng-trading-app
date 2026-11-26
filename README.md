@@ -304,7 +304,7 @@ The page at `/flare_monitor` shows whether LNG plant flares are burning, from th
 
 **How it works**
 
-1. The collector (`backend/app/features/flare_monitor/collector/`) opens the WoodMac map in headless Chromium every `FLARE_POLL_SECONDS` (5 minutes) and keeps the camera images the map requests.
+1. The collector (`backend/app/features/flare_monitor/collector/`) runs every `FLARE_POLL_SECONDS` (5 minutes). In **API mode** (`FLARE_SOURCE=api`, used on Radix) it asks WoodMac's camera API for each tracked camera's new frames with a login token kept in Databricks; in **browser mode** (the default, for a machine that can sign in to WoodMac) it opens the WoodMac map in headless Chromium and keeps the images the page requests.
 2. Each image name (`1577_20261123_011828.jpg`) gives the camera ID and the capture time. The time is wall-clock time in `FLARE_IMAGE_TIMEZONE` (`America/New_York`; see "Behaviour to know about") and is stored as UTC. A camera and image time that is already stored is skipped, as is the same frame served under a new name.
 3. A classifier labels each image `flare`, `no_flare` or `uncertain`, with a quality flag. The baseline (`classifier.py`) counts very bright pixels inside the camera's flare region; it implements a `Classifier` protocol so a trained model can replace it. A blank, clipped or corrupt image is **unusable**, which is treated as unknown and never as "no flare".
 4. A per-camera state machine (`state.py`) turns labels into **on / off / unknown**. A flare needs 2 flare images in a row to turn on, and "off" needs 3 clear images in a row (`FLARE_FLARE_REQUIRED`, `FLARE_CLEAR_REQUIRED`). Obstructed images (3 in a row) or no new image for 30 minutes (`FLARE_MISSING_MINUTES`) make the camera unknown. A change between on and off is stored as an event with `alert = true`; losing or regaining sight of the flare is an event without an alert. If a Databricks write fails, the collector keeps the pending camera states and events and retries them on the next cycle (events are written idempotently, so a retry cannot duplicate one); observations are retried by reading the same images again.
@@ -329,13 +329,24 @@ The page at `/flare_monitor` shows whether LNG plant flares are burning, from th
 
 The collector writes to the Databricks tables in `FLARE_MONITOR_SCHEMA`, so it needs the same Databricks settings as the backend, and the service principal must be allowed to create tables there. To only collect images for labelling, with no Databricks, keep using `collect_woodmac_images.py`.
 
-*On Radix:* nothing to run. The `flare-collector` component starts with the deployment once its secrets are set (`WOODMAC_USERNAME`, `WOODMAC_PASSWORD` or `WOODMAC_STORAGE_STATE`, and the Databricks ones). Check its logs in the Radix console for `Signed in to WoodMac using ...` and `Map load: ...` lines.
+*On Radix* (API mode): the `flare-collector` component starts with the deployment and needs only the six Databricks secrets. It cannot sign in to WoodMac itself (Equinor single sign-on needs an Equinor-managed device), so it reads a WoodMac login token that a signed-in machine stores in the `flare_api_token` table. WoodMac's own Images page calls the same API with the same kind of token; the token lasts 24 hours.
+
+1. **Publish the token** from a machine that is signed in to Equinor (your desktop), from `backend/` with `FLARE_BROWSER_PROFILE`, `FLARE_BROWSER_CHANNEL` and `FLARE_SSO_USERNAME` set in `.env` (see "Signing in" below):
+   ```powershell
+   uv run --group collector python -m app.features.flare_monitor.collector.publish_token
+   ```
+   It signs in through the Edge profile, makes the WoodMac page renew its login token (so the stored one always has a full 24 hours), reads the token the page sends to its camera API, and saves it with its expiry. It prints the expiry, never the token.
+2. **Repeat it on a schedule.** From a normal PowerShell window, `.\scripts\register-flare-token-task.ps1` registers a Windows scheduled task that runs it at log-on and every 4 hours (`-EveryHours` changes that), and catches up when the machine was off. Remove it with `Unregister-ScheduledTask FlareMonitor-PublishToken`. It only runs while you are signed in to Windows.
+3. **The Radix collector** picks up the newest token on every cycle. It downloads the frames (WoodMac's image links are signed, so they need no token), classifies them and writes to Databricks. Its logs show `API read: N frame(s) downloaded, M new` every 5 minutes. If the token is missing or expired it logs why, and the page shows the cameras as unknown after 30 minutes.
+4. **After a gap** (a weekend with the desktop off, a stopped collector) the collector asks WoodMac for the frames it missed, going back at most `FLARE_BACKFILL_HOURS` (96). WoodMac keeps at least two weeks of frames but returns one day per request, so it walks forward in 12-hour windows. The page goes back to normal once a fresh token is published; the missed hours are filled in and any on/off changes in them are recorded in time order.
+
+The token table holds a credential, so restrict who can read `flare_api_token`. A WoodMac API key, or a WoodMac login that is not tied to Equinor sign-on, would remove the need for the desktop.
 
 *Getting images to label:* `uv run --group collector python -m app.features.flare_monitor.collector.fetch_images --hours 12` signs in, makes sure the `FLARE_CAMERAS` cameras are on the dashboard, and saves the last 12 hours of their images (about 140 per camera) to `FLARE_CACHE_DIR/<camera id>/`. It needs no Databricks, classifies nothing and skips cameras that are not in `FLARE_CAMERAS`. Run it again to add newer images; files already saved are skipped.
 
 *Labelling and checking the rule:* see below.
 
-**Signing in.** WoodMac signs Equinor staff in through Equinor single sign-on, which only completes silently in a browser on a managed Equinor machine, so a Radix pod cannot use it. The collector tries three routes in this order. **1. A browser profile on the machine it runs on** (`FLARE_BROWSER_PROFILE`, `FLARE_BROWSER_CHANNEL=msedge`, `FLARE_SSO_USERNAME=<your Equinor email>`): when the profile is signed out the collector types the email on WoodMac's sign-on page and Equinor sign-on finishes by itself, with no password or MFA. This works headless and was tested from a fully signed-out profile. Keep that profile folder to the collector (it cannot be open in another Edge window) and keep it out of git. **2. The service account** (`WOODMAC_USERNAME`, `WOODMAC_PASSWORD`; the form is filled with common field selectors, so it needs no MFA or captcha, and an account tied to Equinor sign-on will not pass). **3. A saved session** (`WOODMAC_STORAGE_STATE`). WoodMac's login tokens are single use, so a saved session dies as soon as any other browser renews it; do not rely on it. Create one on your own machine, then store the printed value as the Radix secret:
+**Signing in** (browser mode, and the publish step above). WoodMac signs Equinor staff in through Equinor single sign-on, which only completes silently in a browser on a managed Equinor machine, so a Radix pod cannot use it. The collector tries three routes in this order. **1. A browser profile on the machine it runs on** (`FLARE_BROWSER_PROFILE`, `FLARE_BROWSER_CHANNEL=msedge`, `FLARE_SSO_USERNAME=<your Equinor email>`): when the profile is signed out the collector types the email on WoodMac's sign-on page and Equinor sign-on finishes by itself, with no password or MFA. This works headless and was tested from a fully signed-out profile. Keep that profile folder to the collector (it cannot be open in another Edge window) and keep it out of git. **2. The service account** (`WOODMAC_USERNAME`, `WOODMAC_PASSWORD`; the form is filled with common field selectors, so it needs no MFA or captcha, and an account tied to Equinor sign-on will not pass). **3. A saved session** (`WOODMAC_STORAGE_STATE`). WoodMac's login tokens are single use, so a saved session dies as soon as any other browser renews it; do not rely on it. Create one on your own machine, then store the printed value as the Radix secret:
 
 ```powershell
 cd backend
@@ -723,14 +734,17 @@ lng-trading-app/
 | `LNG_BALANCE_DEMAND_HISTORY_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand` | Same demand table with a snapshot per `forecast_date`, for comparing forecasts |
 | `FLARE_MONITOR_SCHEMA` | `ms_vulcan_gplng_plab.trader_news_app` | Schema holding the flare monitor tables |
 | `WOODMAC_USERNAME` / `WOODMAC_PASSWORD` | none | Service account the flare collector signs in with (Radix secrets, collector only) |
-| `WOODMAC_STORAGE_STATE` | none | Saved WoodMac session used when the other sign-in routes fail (Radix secret, collector only) |
+| `WOODMAC_STORAGE_STATE` | none | Saved WoodMac session used by browser mode when the other sign-in routes fail (collector only) |
+| `FLARE_SOURCE` | `browser` | `api` reads frames from WoodMac's camera API with the token in `flare_api_token` (Radix); `browser` signs in to the WoodMac page (collector only) |
+| `FLARE_BACKFILL_HOURS` | `96` | After a gap, API mode fetches the missed frames going back at most this many hours (collector only) |
+| `WOODMAC_ACCESS_TOKEN` / `WOODMAC_API_BASE` | none / `https://api.genscape.com/natgas/iot/v1` | A token to use instead of the stored one (testing), and the camera API address (collector only) |
 | `FLARE_BROWSER_PROFILE` / `FLARE_BROWSER_CHANNEL` | none | Browser profile folder and browser (`msedge`) the collector signs in with on an Equinor machine (collector only) |
 | `FLARE_SSO_USERNAME` | none | Email typed on WoodMac's sign-on page when the profile is signed out (collector only) |
 | `FLARE_CAMERAS` | none (all cameras) | JSON of cameras to track, with plant and flare region (collector only) |
 | `FLARE_IMAGE_TIMEZONE` | `America/New_York` | Time zone of the timestamps in image names (collector only) |
 | `FLARE_POLL_SECONDS` / `FLARE_CACHE_HOURS` | `300` / `6` | How often the map is read, and how long cached images are kept (collector only) |
 | `FLARE_HOURS_BACK` | `1` | Hours of history the WoodMac dashboard loads on each read (collector only) |
-| `FLARE_NO_SANDBOX` | `false` | Start Chromium without its sandbox; set to `true` on Radix, where the container does not allow user namespaces (collector only) |
+| `FLARE_NO_SANDBOX` | `false` | Start Chromium without its sandbox, for browser mode in a container that does not allow user namespaces (collector only) |
 | `SECRET_KEY` | random | JWT signing key |
 | `BACKEND_CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
 | `FIRST_SUPERUSER` | `admin@example.com` | Default admin user email |

@@ -88,6 +88,15 @@ class FlareProcessor:
                 self._dirty.add(camera_id)
         self.flush()
 
+    def newest(self, camera_id: str) -> dt.datetime | None:
+        """When the camera's newest stored image was taken."""
+        return self._newest.get(camera_id)
+
+    def knows(self, file_name: str) -> bool:
+        """Whether this image was already processed, so it need not be downloaded again."""
+        parsed = parse_image_name(file_name, self._settings.image_timezone)
+        return parsed is not None and (parsed.camera_id, parsed.taken_at) in self._seen
+
     def process_batch(self, images: list[tuple[str, bytes]]) -> int:
         """Handle the images found on one map load, oldest first. Returns how many were new."""
         parsed = []
