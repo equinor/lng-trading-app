@@ -100,6 +100,13 @@ class Settings(BaseSettings):
         "ms_vulcan_gplng_plab.prices_silver.mid_term_curve_builder_custom"
     )
 
+    # Flare monitor: the collector worker writes flare_observations, flare_camera_state and
+    # flare_events into this schema and the API reads them.
+    FLARE_MONITOR_SCHEMA: str = "ms_vulcan_gplng_plab.trader_news_app"
+    # No image for this long and the API reports a camera as unknown. The collector uses the
+    # same variable to decide when to mark a camera unknown itself.
+    FLARE_MISSING_MINUTES: int = 30
+
     # LNG balance model: daily supply by loading country and demand by destination country
     LNG_BALANCE_SUPPLY_TABLE: str = (
         "ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply_latest"

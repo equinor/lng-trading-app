@@ -8,8 +8,8 @@ node_modules/
 
 .env
 
-# WoodMac scraper browser profiles (cookies, sessions) and downloaded images
-/woodmac_browser_profile/
-/woodmac_edge_profile/
-/woodmac_images/
+# WoodMac flare collector: browser profiles hold session cookies, images are cached locally.
+woodmac_browser_profile/
+woodmac_edge_profile/
+woodmac_images/
 

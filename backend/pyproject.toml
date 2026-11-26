@@ -24,7 +24,16 @@ dependencies = [
 ]
 
 [dependency-groups]
+# Only the flare-monitor collector image (backend/Dockerfile.collector) installs this group.
+collector = [
+    "playwright>=1.49,<2.0",
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "tzdata>=2024.1",
+]
 dev = [
+    # The flare monitor tests need numpy and Pillow, so the test environment includes them.
+    { include-group = "collector" },
     "pytest<8.0.0,>=7.4.3",
     "mypy<2.0.0,>=1.8.0",
     "ruff<1.0.0,>=0.2.2",

@@ -1,5 +1,6 @@
 import {
   ChartSpline,
+  Flame,
   Home,
   Newspaper,
   Scale,
@@ -30,6 +31,8 @@ const baseItems: Item[] = [
   { icon: Waypoints, tone: "emerald", title: "Pipeline Nominations", path: "/pipeline_nominations" },
   { type: "separator", key: "pipeline-lng-balance-divider" },
   { icon: Scale, tone: "sky", title: "LNG Balance", path: "/lng_balance" },
+  { type: "separator", key: "lng-balance-flare-divider" },
+  { icon: Flame, tone: "amber", title: "Flare Monitor", path: "/flare_monitor" },
   { type: "separator", key: "pipeline-curve-builder-divider" },
   { icon: ChartSpline, tone: "rose", title: "Mid-term Curve Builder", path: "/mid_term_curves" },
 ]

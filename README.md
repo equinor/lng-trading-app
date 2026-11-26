@@ -209,7 +209,7 @@ Write failures are only logged. They are not shown in the UI.
 
 ## Pipeline Nominations page
 
-The page at `/pipeline_nominations` reproduces the "Platts US Daily Pipeline Nominations (Monthly)" report and shows the same views from a second provider, WoodMac Genscape. A toggle in the page header switches between the two. It is a feature folder on each side, as described under "Adding a New Page".
+The page at `/pipeline_nominations` shows US LNG feedgas pipeline nominations per plant, pipeline and day, with by-cycle detail. WoodMac Genscape supplies most plants and Platts supplies LNG Canada and Costa Azul, both read through one gold table. It is a feature folder on each side, as described under "Adding a New Page".
 
 | Part | File |
 |------|------|
@@ -224,37 +224,34 @@ The page at `/pipeline_nominations` reproduces the "Platts US Daily Pipeline Nom
 | Route (URL and title) | `frontend/src/routes/_layout/pipeline_nominations.tsx` |
 | Components | `frontend/src/features/pipeline_nominations/components/` (`PipelineFilter`, `FlowChart`, `CycleChart`, `NominationsMatrix`) |
 
-**Data.** Two tables, one per `source`, plus a bronze table for the WoodMac cycle view. The service account used by the backend needs `SELECT` on all three.
+**Data.** One gold table, `PIPELINE_NOMINATIONS_GOLD_TABLE`. The service account used by the backend needs `SELECT` on it.
 
-| Source | Setting | Default table | Volume column |
-|--------|---------|---------------|---------------|
-| `platts` | `PIPELINE_NOMINATIONS_PLATTS_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data` | `Vol_BCF`, per `name` (facility), `pipelineName`, `flowDate` |
-| `woodmac` | `PIPELINE_NOMINATIONS_WOODMAC_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles` | `Nominated_VolBCF`, per `LNG_Plant_Name` (facility), `pipelineName`, `gasDay` |
-| `woodmac` (cycle view) | `PIPELINE_NOMINATIONS_WOODMAC_CYCLES_TABLE` | `ms_vulcan_gplng_plab.fundamentals_bronze.wm_genscape_pipeline_all_cycles` | `netScheduledCapacity` / 1,039,000, per cycle |
+| Setting | Default table | Volume column |
+|---------|---------------|---------------|
+| `PIPELINE_NOMINATIONS_GOLD_TABLE` | `ms_vulcan_gplng_plab.fundamentals_gold.us_lng_feedgas_tracking` | `vol_bcfd`, per `plant` (facility), `pipeline_name`, `gas_day`, with `cycle`, `revision_no` and the `is_latest_*` flags |
 
-Each repository query returns the same row shape (facility, pipeline, day, BCF) over the last 13 months, so the service and the page treat both sources alike. For WoodMac the query keeps only the latest row (by `insertTimestamp`) for each pipeline, location and day, so nomination cycles are never added together. The service caches each source for 15 minutes and derives everything else from it in memory. The WoodMac cycle view reads its own query on the bronze table (the last 14 gas days), cached for one hour.
+The daily query returns one row per facility, pipeline and day (BCF) over the last 12 months. The gold table has one row per meter, gas day, cycle and revision, so the daily query keeps only `is_latest_for_day` rows (summing without that filter would count a day once per cycle). The gold table covers a rolling 12 months, so the page starts at the first whole month. It takes Platts for LNG Canada and Costa Azul and WoodMac for every other plant. The service caches the daily data for 15 minutes and derives everything else from it in memory. The cycle view reads its own gold query (the last 14 gas days), cached for one hour.
 
 **Endpoints** (Reader role):
 
 | Endpoint | Returns |
 |----------|---------|
-| `GET /api/v1/pipeline-nominations/filters?source=platts\|woodmac` | Facilities with their pipelines, and the latest data date, for one source (default `woodmac`) |
-| `GET /api/v1/pipeline-nominations/overview?source=platts\|woodmac&selected=Facility::Pipeline\|Facility::Pipeline` | The 14-day and 180-day daily series per facility, plus two tables with the same shape: `monthly_table` (one column per month) and `daily_table` (one column per day for the last 14 days). For `source=woodmac` it also returns `cycle_series` (the final nomination of each cycle for the last 7 gas days, per facility) and `cycle_table` (the last 3 gas days, one column per cycle); both are empty for Platts. An empty `selected` means everything. `source` defaults to `woodmac`. |
-| `POST /api/v1/pipeline-nominations/ai-overview?source=platts\|woodmac&selected=...&refresh=true` | A written summary (`text`, `model`, `latest_date`, `generated_at`) of the same view and filters. Cached for an hour per source, filter and latest date; `refresh=true` skips the cache. |
+| `GET /api/v1/pipeline-nominations/filters` | Facilities with their pipelines, and the latest data date |
+| `GET /api/v1/pipeline-nominations/overview?selected=Facility::Pipeline\|Facility::Pipeline` | The 14-day and 180-day daily series per facility, plus two tables with the same shape: `monthly_table` (one column per month) and `daily_table` (one column per day for the last 14 days), and `cycle_series` (the final nomination of each cycle for the last 7 gas days, per facility) and `cycle_table` (the last 3 gas days, one column per cycle). An empty `selected` means everything. |
+| `POST /api/v1/pipeline-nominations/ai-overview?selected=...&refresh=true` | A written summary (`text`, `model`, `latest_date`, `generated_at`) of the same view and filters. Cached for an hour per filter and latest date; `refresh=true` skips the cache. |
 
 **Behaviour to know about**
 
 - The 14 and 180 day windows end at the latest date in the data, not at today's date, so the charts are never empty when the feed is a few days behind. They share one **Flow BCF/d** chart with a 14 days / 180 days switch, newest day on the right. In both charts the latest value is written at the tail end of each line (labels that would overlap are spread apart, see `EndLabels.tsx`), and the legend sits below the chart.
-- The WoodMac cycle chart sits beside the flow chart. It shows one gas day at a time (a switch picks one of the last 5), with the cycles on the x axis and a line per facility, so every plant is visible and nothing is summed. A line only joins the cycles of its own day, because each point is that cycle's final nomination, not a value that holds over time. Facilities without cycle data are not drawn.
+- The WoodMac cycle chart sits beside the flow chart. It shows one gas day at a time (a switch picks one of the last 5), with the cycles on the x axis and a line per facility, so every plant is visible and nothing is summed. A line only joins the cycles of its own day, because each point is that cycle's final nomination, not a value that holds over time. Every plant has cycle data, including LNG Canada and Costa Azul.
 - **AI overview.** A card at the top of the page shows a summary of the current view from a Databricks Foundation Model endpoint. The backend (`ai_overview.py`) turns the overview tables into a short text digest (daily totals, facility and pipeline moves, monthly averages and, for WoodMac, the latest day's cycle revisions) and sends it with `ai_query` over the existing SQL connection, so no extra credentials are needed. The model is told to use only that digest. Nothing is generated on the server until the page asks: the summary is requested when the page loads and again, about a second after you stop changing them, when the source or filter changes. A **Regenerate** button skips the server cache. The endpoint comes from `PIPELINE_NOMINATIONS_AI_ENDPOINT`.
 - The page shows the table first and the charts below it.
 - Month columns come from the whole dataset, so they stay the same while filtering.
 - The table has a toggle between **Month on month** and **Day on day**, and for WoodMac also **By cycle**. All tables arrive in the same response, so switching is instant. The number of day columns is `_DAILY_TABLE_DAYS` in the service.
-- **Cycle view (WoodMac only).** Shows the final nomination of each of the five daily cycles: Timely (`TI`), Evening (`EV`), Intraday 1 to 3 (`I1`, `I2`, `I3`). The silver table keeps only the latest cycle per day, so this view reads the bronze table, keeps rows with `cycleStatus = 'Final'`, `locationRole = 'DELIVERY'` and `facilityType = 'LNG TERMINAL'`, and takes the newest row (by `insertTimestamp`) per gas day, location and cycle. Locations are then summed per facility and pipeline. The table covers the last `_CYCLE_TABLE_DAYS` (3) gas days and the chart the last `_CYCLE_CHART_DAYS` (7). The % is the change on the previous cycle of the same day, and the first cycle of a day has none. A cycle that has not happened yet is blank. If a location did not publish a cycle that has happened for other locations (the late intraday cycles are often missing), the previous cycle's value is carried forward and shown in italics. The backend caches this query for an hour (`_CYCLE_TTL`) and the page refetches every hour while the WoodMac source is open.
+- **Cycle view.** Shows the final nomination of each cycle: Timely (`TI`), Evening (`EV`), Intraday 1 to 3 (`I1`, `I2`, `I3`) and, once the gas day is over, Post (`PO`). The gold table already has a row for every meter in every cycle of the plant-day, with a meter that did not re-post carrying its last value (`is_carried_forward`), so the query keeps the `is_latest_in_cycle` rows and sums them per plant, pipeline, day and cycle. A cell is shown in italics when any of its meters was carried forward. The gold cycle names are mapped to the short codes in SQL. For LNG Canada and Costa Azul the cycles are inferred from the Platts publish time, so they can have gaps. The table covers the last `_CYCLE_TABLE_DAYS` (3) gas days and the chart the last `_CYCLE_CHART_DAYS` (7). The % is the change on the previous cycle of the same day, and the first cycle of a day has none. A cycle that has not happened yet is blank. The backend caches this query for an hour (`_CYCLE_TTL`) and the page refetches every hour.
 - The % columns are changes against the previous column: the previous month, or the previous day. They are blank when the previous value is missing or zero. In the day view the first column's % still uses the day before the window.
 - The latest month is marked with `*` and shown in italics when the data stops before month end, because its % change compares a partial month with a full one.
 - The filter works like a Power BI slicer: ticking a facility selects all of its pipelines, expanding it lets you pick individual pipelines, and nothing ticked means everything.
-- Switching source clears the filter, because pipeline names differ between providers. Each source has its own latest date, so the chart windows and the day columns end at that source's last day. The facility lists differ too (WoodMac has Cove Point; Costa Azul and LNG Canada are not in the WoodMac table, so the WoodMac view takes their daily flow from Platts and they have no cycle data).
 - The latest WoodMac day usually holds an early nomination cycle, so it can still change.
 
 ## LNG Balance page
@@ -300,6 +297,93 @@ The page at `/lng_balance` shows the LNG balance model: supply, demand and **net
 - **Choosing the forecast shown.** The **Forecast shown** selector at the top of the page (Latest, quick picks, or any date) sets one forecast for the table, the Supply and Demand chart and the blue net short line. For an older forecast, days before its date are actuals from the latest table and days after are that date's snapshot from the history table. A badge on the page title, the table and each chart says which forecast is shown: blue for the latest, amber for an older one. Views of past forecasts are cached in memory (24 per side).
 - **Comparing forecasts.** The **Compare with other forecasts** panel, always shown above the net short chart, has quick picks (1 week, 1 month, 3 months, 6 months, 1 year before the newest forecast, each snapped to the nearest earlier date that exists) and a date field. Each chosen forecast date adds one line, coloured to match its chip, showing supply minus demand as it was forecast on that date, drawn over the forecast shown for the page. The country filters, unit and year chips apply to these lines too. Up to 12 can be shown. A forecast only covers days from its own date, so when that date is not the 1st its first month is left out rather than shown as a false dip, and months past the end of demand are dropped. The backend reads only the requested `forecast_date`s from the history tables and keeps them in memory, since a past forecast never changes.
 - Years start collapsed in the table. A year expands into quarters and a quarter into months; the month rows come from the same `months` list the charts use, so they need no extra request. The net column is shaded by size, scaled separately for year, quarter and month rows.
+
+## Flare Monitor page
+
+The page at `/flare_monitor` shows whether LNG plant flares are burning, from the WoodMac Natural Gas Analyst thermal cameras. A separate worker (the `flare-collector` Radix component) collects and classifies the images; the web app only reads the results from Databricks.
+
+**How it works**
+
+1. The collector (`backend/app/features/flare_monitor/collector/`) opens the WoodMac map in headless Chromium every `FLARE_POLL_SECONDS` (5 minutes) and keeps the camera images the map requests.
+2. Each image name (`1577_20261123_011828.jpg`) gives the camera ID and the capture time. The time is wall-clock time in `FLARE_IMAGE_TIMEZONE` (`America/New_York`; see "Behaviour to know about") and is stored as UTC. A camera and image time that is already stored is skipped, as is the same frame served under a new name.
+3. A classifier labels each image `flare`, `no_flare` or `uncertain`, with a quality flag. The baseline (`classifier.py`) counts very bright pixels inside the camera's flare region; it implements a `Classifier` protocol so a trained model can replace it. A blank, clipped or corrupt image is **unusable**, which is treated as unknown and never as "no flare".
+4. A per-camera state machine (`state.py`) turns labels into **on / off / unknown**. A flare needs 2 flare images in a row to turn on, and "off" needs 3 clear images in a row (`FLARE_FLARE_REQUIRED`, `FLARE_CLEAR_REQUIRED`). Obstructed images (3 in a row) or no new image for 30 minutes (`FLARE_MISSING_MINUTES`) make the camera unknown. A change between on and off is stored as an event with `alert = true`; losing or regaining sight of the flare is an event without an alert. If a Databricks write fails, the collector keeps the pending camera states and events and retries them on the next cycle (events are written idempotently, so a retry cannot duplicate one); observations are retried by reading the same images again.
+5. Images are cached on the worker's disk and discarded once older than `FLARE_CACHE_HOURS` (6). Observations, state and events stay in Databricks.
+
+**Running it**
+
+*Locally* (to try the collector or gather images; run from `backend/`):
+
+1. One-time setup: `uv sync --group collector`, then `uv run playwright install chromium`.
+2. Save a WoodMac session: `uv run --group collector python -m app.features.flare_monitor.collector.save_session`. A browser opens; sign in, open the map, press Enter in the terminal, then copy the printed value.
+3. Add to the repo-root `.env` (the Databricks variables are already there for the backend):
+   ```
+   WOODMAC_STORAGE_STATE=<the printed value>
+   FLARE_CAMERAS={"1577": {"plant": "LNG Canada Flare", "roi": [0, 0, 0.4, 0.55]}}
+   FLARE_CACHE_DIR=../woodmac_images
+   FLARE_CACHE_HOURS=720
+   ```
+   `FLARE_CAMERAS` is optional (without it every camera is tracked). The last two keep the images on disk for 30 days, so you have something to label; the 6-hour default is for the deployed worker.
+4. Start it: `uv run --group collector python -m app.features.flare_monitor.collector`. It logs one line per map load (`Map load: N image(s), M new`) and every 5 minutes it classifies the new images and writes them to Databricks. Stop it with Ctrl+C.
+5. See the results: start the app as usual (see Running Locally) and open **Flare Monitor** in the sidebar.
+
+The collector writes to the Databricks tables in `FLARE_MONITOR_SCHEMA`, so it needs the same Databricks settings as the backend, and the service principal must be allowed to create tables there. To only collect images for labelling, with no Databricks, keep using `collect_woodmac_images.py`.
+
+*On Radix:* nothing to run. The `flare-collector` component starts with the deployment once its secrets are set (`WOODMAC_USERNAME`, `WOODMAC_PASSWORD` or `WOODMAC_STORAGE_STATE`, and the Databricks ones). Check its logs in the Radix console for `Signed in to WoodMac using ...` and `Map load: ...` lines.
+
+*Getting images to label:* `uv run --group collector python -m app.features.flare_monitor.collector.fetch_images --hours 12` signs in, makes sure the `FLARE_CAMERAS` cameras are on the dashboard, and saves the last 12 hours of their images (about 140 per camera) to `FLARE_CACHE_DIR/<camera id>/`. It needs no Databricks, classifies nothing and skips cameras that are not in `FLARE_CAMERAS`. Run it again to add newer images; files already saved are skipped.
+
+*Labelling and checking the rule:* see below.
+
+**Signing in.** The collector first tries the service account (`WOODMAC_USERNAME`, `WOODMAC_PASSWORD`; the form is filled with common field selectors, so it needs no MFA or captcha). If that fails it uses a saved session (`WOODMAC_STORAGE_STATE`). Create the saved session on your own machine, then store the printed value as the Radix secret:
+
+```powershell
+cd backend
+uv run --group collector python -m app.features.flare_monitor.collector.save_session
+```
+
+If neither works the collector logs the reason, marks cameras unknown once their images stop, and retries after `FLARE_SIGNIN_RETRY_MINUTES` (30) so it does not lock the account. Repeat the step above when the saved session expires. A saved session does not last long (one saved the day before was already signed out), so the service account is the reliable route on Radix. While it runs, the collector writes the browser's renewed session to `woodmac_session.json` in `FLARE_CACHE_DIR` and tries that file before the secret, so a local restart keeps working; the file is lost when a Radix pod restarts.
+
+**Cameras and flare regions.** Set `FLARE_CAMERAS` to JSON of the cameras to track: the image camera ID (the number in the file names), its WoodMac name as `plant`, and optionally the flare region as fractions of the image (left, top, right, bottom). Without it every camera on the map is tracked, over the whole image. The region matters: stacks and towers glow all the time, so exclude them. These 14 are the cameras being tracked (the `.env` and `radixconfig.yaml` value); only 1577 has a region so far, so draw the others in the labelling tool.
+
+```json
+{"1209": {"plant": "Cameron Train 3"}, "1186": {"plant": "Cameron Trains 1 & 2"}, "1222": {"plant": "Corpus Christi Trains 1, 2, & 3"}, "1575": {"plant": "Corpus Christi Trains 4, 5, 6, 7"}, "1576": {"plant": "Corpus Christi Trains 7, 8, 9, & 10"}, "1093": {"plant": "Cove Point Train"}, "1597": {"plant": "Golden Pass Train 1"}, "1571": {"plant": "LNG Canada Train 1"}, "1577": {"plant": "LNG Canada Flare", "roi": [0, 0, 0.4, 0.55]}, "1559": {"plant": "Plaquemines Power 1"}, "1611": {"plant": "Plaquemines Power 2"}, "1211": {"plant": "Sabine Pass Trains 5 & 6"}, "858": {"plant": "Sabine Trains 1 & 2"}, "703": {"plant": "Sabine Trains 3 & 4"}}
+```
+
+The flare rule only makes sense for cameras that look at a flare, and the Plaquemines Power cameras may not show one. The collector keeps the WoodMac dashboard to exactly the cameras listed here: when it signs in it clears any other camera from the dashboard and adds the listed ones.
+
+Each camera can also set `hot_delta` (grey levels above the image median that count as hot, 90), `min_pixels` (hot pixels for "flare", 100) and `max_clear_pixels` (at most this many for "no flare", 10). The defaults are tuned only on flare-on images from camera 1577, so check them against flare-off images before relying on alerts.
+
+**Labelling and checking the rule.** A small local tool (`backend/app/features/flare_monitor/labelling/`) is for labelling saved images, drawing each camera's flare region, and checking the rule against your labels. It needs no database or login and only listens on `127.0.0.1`.
+
+```powershell
+cd backend
+uv run --group collector python -m app.features.flare_monitor.labelling serve    # open http://127.0.0.1:8765
+uv run --group collector python -m app.features.flare_monitor.labelling report   # accuracy per camera, in the terminal
+```
+
+It reads the images in `../woodmac_images` (any folder layout; use `--images` for another folder, such as the collector's cache) and saves labels and regions to `../flare_labels.json` (`--labels`). Press `F` flare, `N` no flare, `U` unsure or `X` obstructed or unusable; drag on the image to mark the flare region. "Check the rule against my labels" (or `report`) shows, per camera, how often the rule agrees, the flares it missed, the false flares, and the thresholds that agree with your labels most often, plus the full `FLARE_CAMERAS` value to paste into Radix. That value starts from your current `FLARE_CAMERAS` (the tool reads it from `.env`), so every configured camera keeps its plant name and untuned cameras are left as they are; only the regions you drew and the thresholds it found are laid on top. Unsure images are left out of the figures. The rule's guess is hidden unless you tick the box, so it doesn't bias your labels. Aim for 30 or more labels per camera, with plenty of flare-off images; a camera needs both kinds before it gets a suggestion.
+
+**Tables** (in `FLARE_MONITOR_SCHEMA`, created by the collector and the API when missing)
+
+| Table | Holds |
+|-------|-------|
+| `flare_observations` | One row per image: `camera_id`, `image_ts` (UTC), `label`, `usable`, `hot_pixels`, `peak_delta`, `score`, `image_sha256`, `classifier_version` |
+| `flare_camera_state` | One row per camera: `state`, `since`, `last_image_at`, `last_label`, `last_usable`, `last_score`, `plant` |
+| `flare_events` | State changes: `previous_state`, `state`, `alert`, `reason` |
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /api/v1/flare-monitor/overview?hours=6` | `cameras` (current state; `stale` is true and the state is shown as unknown when no image arrived within `FLARE_MISSING_MINUTES`, even if the collector has stopped), `timelines` (one point per image in the window, at most 24 hours) and the latest 50 `events` |
+
+**Behaviour to know about**
+
+- The service account must be allowed to create tables in `FLARE_MONITOR_SCHEMA`, and the collector and the API must use the same schema.
+- **Image time zone.** WoodMac stamps the file names with the time it shows on its page as "CCT". Comparing file names with the server's `Last-Modified` header (2026-11-23, in November) shows that clock is UTC-5, so the default is `America/New_York`. If WoodMac keeps a fixed UTC-5 all year instead of following US daylight saving, set `FLARE_IMAGE_TIMEZONE=Etc/GMT+5`. The collector logs the age of the newest image after every map load and warns when it is over 30 minutes old or in the future, which is what a wrong zone looks like. The state logic does not depend on it, because "missing" uses when images arrived.
+- **Choosing cameras.** The WoodMac map only loads images for the cameras on its dashboard (up to 24), and the dashboard is kept in the browser, not in your account. When the collector signs in it makes the dashboard show exactly the cameras in `FLARE_CAMERAS` (the `plant` value must be WoodMac's exact camera name): if any other camera is there it presses CLEAR and adds the listed ones through the "Add Cameras" dialog. Its camera IDs are the numbers in the image file names, which are not the IDs in WoodMac's camera list API.
+- **Hours back.** The dashboard asks WoodMac for each camera's frames since "now minus Hours Back" (3 by default, and the setting resets on every reload). The collector rewrites that request to `FLARE_HOURS_BACK` (default 1) hours. This matters: the page plays frames oldest first and loads them gradually, so with 3 hours the newest frames had not arrived by the time the collector read the page (they looked 2 to 3 hours old), while with 1 hour the newest are under a minute old. The "Newest image is ... min old" log line and warning (over 30 minutes) show this.
+- Run it locally with `uv run --group collector python -m app.features.flare_monitor.collector` from `backend/` (set `FLARE_HEADED=true` to watch the browser; run `playwright install chromium` once). The WoodMac browser profiles and image folders used by `collect_woodmac_images.py` are in `.gitignore` because they hold session cookies.
+- The collector image is `backend/Dockerfile.collector`. Its Playwright base image tag must match the `playwright` version in `uv.lock`.
 
 ## Mid-term Curves page
 
@@ -631,14 +715,20 @@ lng-trading-app/
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NEWS_TABLE` | `ms_vulcan_gplng_plab.trader_news_app.platts_lng_top_news` | Unity Catalog table name |
-| `PIPELINE_NOMINATIONS_PLATTS_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.platts_facility_level_flow_data` | Platts facility-level daily flow table |
-| `PIPELINE_NOMINATIONS_WOODMAC_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.wm_genscape_pipeline_all_cycles` | WoodMac Genscape pipeline nominations table |
-| `PIPELINE_NOMINATIONS_WOODMAC_CYCLES_TABLE` | `ms_vulcan_gplng_plab.fundamentals_bronze.wm_genscape_pipeline_all_cycles` | WoodMac table that keeps every nomination cycle (by-cycle view) |
+| `PIPELINE_NOMINATIONS_GOLD_TABLE` | `ms_vulcan_gplng_plab.fundamentals_gold.us_lng_feedgas_tracking` | Gold feedgas tracking table used by the WoodMac view (daily flows and cycles, every plant) |
 | `PIPELINE_NOMINATIONS_AI_ENDPOINT` | `databricks-claude-sonnet-5-5` | Databricks serving endpoint that `ai_query` calls for the AI overview |
 | `LNG_BALANCE_SUPPLY_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply_latest` | LNG balance model daily supply by loading country (latest forecast) |
 | `LNG_BALANCE_DEMAND_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand_latest` | LNG balance model daily demand by destination country (latest forecast) |
 | `LNG_BALANCE_SUPPLY_HISTORY_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_supply` | Same supply table with a snapshot per `forecast_date`, for comparing forecasts |
 | `LNG_BALANCE_DEMAND_HISTORY_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand` | Same demand table with a snapshot per `forecast_date`, for comparing forecasts |
+| `FLARE_MONITOR_SCHEMA` | `ms_vulcan_gplng_plab.trader_news_app` | Schema holding the flare monitor tables |
+| `WOODMAC_USERNAME` / `WOODMAC_PASSWORD` | none | Service account the flare collector signs in with (Radix secrets, collector only) |
+| `WOODMAC_STORAGE_STATE` | none | Saved WoodMac session used when the service account cannot sign in (Radix secret, collector only) |
+| `FLARE_CAMERAS` | none (all cameras) | JSON of cameras to track, with plant and flare region (collector only) |
+| `FLARE_IMAGE_TIMEZONE` | `America/New_York` | Time zone of the timestamps in image names (collector only) |
+| `FLARE_POLL_SECONDS` / `FLARE_CACHE_HOURS` | `300` / `6` | How often the map is read, and how long cached images are kept (collector only) |
+| `FLARE_HOURS_BACK` | `1` | Hours of history the WoodMac dashboard loads on each read (collector only) |
+| `FLARE_NO_SANDBOX` | `false` | Start Chromium without its sandbox; set to `true` on Radix, where the container does not allow user namespaces (collector only) |
 | `SECRET_KEY` | random | JWT signing key |
 | `BACKEND_CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS origins |
 | `FIRST_SUPERUSER` | `admin@example.com` | Default admin user email |
@@ -660,7 +750,7 @@ The app deploys on [Radix](https://www.radix.equinor.com/) (Equinor's PaaS). Con
 | dev | `main` | Auth bypassed (`VITE_BYPASS_AUTH=true`) |
 | prod | `release` | Full auth enabled |
 
-The backend reads its Databricks credentials from Radix secrets.
+The backend reads its Databricks credentials from Radix secrets. The `flare-collector` component is a worker with no port: set its secrets (the Databricks ones plus `WOODMAC_USERNAME`, `WOODMAC_PASSWORD` and `WOODMAC_STORAGE_STATE`) in the Radix console before it can collect.
 
 ## Tech Stack
 

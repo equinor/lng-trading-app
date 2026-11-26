@@ -18,9 +18,7 @@ import { Route as LayoutNews_summaryRouteImport } from './routes/_layout/news_su
 import { Route as LayoutNewsRouteImport } from './routes/_layout/news'
 import { Route as LayoutMid_term_curvesRouteImport } from './routes/_layout/mid_term_curves'
 import { Route as LayoutLng_balanceRouteImport } from './routes/_layout/lng_balance'
-import { Route as LayoutNewsIndexRouteImport } from './routes/_layout/news/index'
-import { Route as LayoutNewsSummaryRouteImport } from './routes/_layout/news/summary'
-import { Route as LayoutNewsNewsletterRouteImport } from './routes/_layout/news/newsletter'
+import { Route as LayoutFlare_monitorRouteImport } from './routes/_layout/flare_monitor'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -68,24 +66,15 @@ const LayoutLng_balanceRoute = LayoutLng_balanceRouteImport.update({
   path: '/lng_balance',
   getParentRoute: () => LayoutRoute,
 } as any)
-const LayoutNewsIndexRoute = LayoutNewsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => LayoutNewsRoute,
-} as any)
-const LayoutNewsSummaryRoute = LayoutNewsSummaryRouteImport.update({
-  id: '/summary',
-  path: '/summary',
-  getParentRoute: () => LayoutNewsRoute,
-} as any)
-const LayoutNewsNewsletterRoute = LayoutNewsNewsletterRouteImport.update({
-  id: '/newsletter',
-  path: '/newsletter',
-  getParentRoute: () => LayoutNewsRoute,
+const LayoutFlare_monitorRoute = LayoutFlare_monitorRouteImport.update({
+  id: '/flare_monitor',
+  path: '/flare_monitor',
+  getParentRoute: () => LayoutRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
+  '/flare_monitor': typeof LayoutFlare_monitorRoute
   '/lng_balance': typeof LayoutLng_balanceRoute
   '/mid_term_curves': typeof LayoutMid_term_curvesRoute
   '/news': typeof LayoutNewsRouteWithChildren
@@ -98,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/news/': typeof LayoutNewsIndexRoute
 }
 export interface FileRoutesByTo {
+  '/flare_monitor': typeof LayoutFlare_monitorRoute
   '/lng_balance': typeof LayoutLng_balanceRoute
   '/mid_term_curves': typeof LayoutMid_term_curvesRoute
   '/news_summary': typeof LayoutNews_summaryRoute
@@ -112,6 +102,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
+  '/_layout/flare_monitor': typeof LayoutFlare_monitorRoute
   '/_layout/lng_balance': typeof LayoutLng_balanceRoute
   '/_layout/mid_term_curves': typeof LayoutMid_term_curvesRoute
   '/_layout/news': typeof LayoutNewsRouteWithChildren
@@ -128,6 +119,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/flare_monitor'
     | '/lng_balance'
     | '/mid_term_curves'
     | '/news'
@@ -140,6 +132,7 @@ export interface FileRouteTypes {
     | '/news/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/flare_monitor'
     | '/lng_balance'
     | '/mid_term_curves'
     | '/news_summary'
@@ -153,6 +146,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_layout'
+    | '/_layout/flare_monitor'
     | '/_layout/lng_balance'
     | '/_layout/mid_term_curves'
     | '/_layout/news'
@@ -235,26 +229,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutLng_balanceRouteImport
       parentRoute: typeof LayoutRoute
     }
-    '/_layout/news/': {
-      id: '/_layout/news/'
-      path: '/'
-      fullPath: '/news/'
-      preLoaderRoute: typeof LayoutNewsIndexRouteImport
-      parentRoute: typeof LayoutNewsRoute
-    }
-    '/_layout/news/summary': {
-      id: '/_layout/news/summary'
-      path: '/summary'
-      fullPath: '/news/summary'
-      preLoaderRoute: typeof LayoutNewsSummaryRouteImport
-      parentRoute: typeof LayoutNewsRoute
-    }
-    '/_layout/news/newsletter': {
-      id: '/_layout/news/newsletter'
-      path: '/newsletter'
-      fullPath: '/news/newsletter'
-      preLoaderRoute: typeof LayoutNewsNewsletterRouteImport
-      parentRoute: typeof LayoutNewsRoute
+    '/_layout/flare_monitor': {
+      id: '/_layout/flare_monitor'
+      path: '/flare_monitor'
+      fullPath: '/flare_monitor'
+      preLoaderRoute: typeof LayoutFlare_monitorRouteImport
+      parentRoute: typeof LayoutRoute
     }
   }
 }
@@ -276,6 +256,7 @@ const LayoutNewsRouteWithChildren = LayoutNewsRoute._addFileChildren(
 )
 
 interface LayoutRouteChildren {
+  LayoutFlare_monitorRoute: typeof LayoutFlare_monitorRoute
   LayoutLng_balanceRoute: typeof LayoutLng_balanceRoute
   LayoutMid_term_curvesRoute: typeof LayoutMid_term_curvesRoute
   LayoutNewsRoute: typeof LayoutNewsRouteWithChildren
@@ -287,6 +268,7 @@ interface LayoutRouteChildren {
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutFlare_monitorRoute: LayoutFlare_monitorRoute,
   LayoutLng_balanceRoute: LayoutLng_balanceRoute,
   LayoutMid_term_curvesRoute: LayoutMid_term_curvesRoute,
   LayoutNewsRoute: LayoutNewsRouteWithChildren,
