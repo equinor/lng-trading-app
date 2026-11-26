@@ -44,7 +44,8 @@ const CHANGE_HEADER: Record<MatrixPeriod, { label: string; title: string }> = {
   day: { label: "%", title: "Change against the previous day" },
   cycle: {
     label: "%",
-    title: "Change against the previous cycle of the same day",
+    title:
+      "Change against the previous published cycle, which can be on the day before",
   },
 }
 

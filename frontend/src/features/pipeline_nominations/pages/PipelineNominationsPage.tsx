@@ -33,7 +33,7 @@ const DESCRIPTION =
 const PERIOD_SUBTITLE: Record<MatrixPeriod, string> = {
   day: "Daily volumes for the last 14 days and change on the previous day. Newest on the left.",
   cycle:
-    "Final nomination of each cycle (Timely, Evening, ID1 to ID3, then Post once the gas day is over) for the last 3 gas days. The % is the change on the previous cycle of the same day. Newest on the left. Refreshed every hour.",
+    "Final nomination of each cycle (Timely, Evening, ID1 to ID3, then Post once the gas day is over) for the last 3 gas days. The % is the change on the previous published cycle, skipping cycles with no value and carrying on from the day before. Newest on the left. Refreshed every hour.",
   month:
     "Average daily volume of each month and change on the previous month. Newest on the left.",
 }

@@ -100,23 +100,22 @@ def _cells(
     values: list[float | None],
     carried: list[bool],
     keep: slice,
-    groups: list[str] | None,
+    skip_blank: bool,
 ) -> list[MatrixCell]:
     """Cells with the % change against the previous column, kept only for the `keep` columns.
 
-    With `groups`, the previous value is forgotten when the group changes, so a new day's
-    first cycle is not compared with the last cycle of the day before.
+    With `skip_blank` (the cycle view), the comparison is with the previous column that has a
+    value, so cycles that were not published are skipped, also across days.
     """
     triples: list[tuple[float | None, float | None, bool]] = []
     previous: float | None = None
     for index, value in enumerate(values):
-        if groups is not None and index > 0 and groups[index] != groups[index - 1]:
-            previous = None
         change = None
         if value is not None and previous:
             change = round((value - previous) / previous * 100, 1)
         triples.append((value, change, carried[index]))
-        previous = value
+        if value is not None or not skip_blank:
+            previous = value
     return [
         MatrixCell(
             bcf=None if value is None else round(value, 4),
@@ -277,7 +276,7 @@ class PipelineNominationsService:
                 columns,
                 _cycle_key,
                 show_last=_CYCLE_TABLE_DAYS * len(_CYCLES),
-                change_within_group=True,
+                skip_blank=True,
             ),
         )
 
@@ -358,7 +357,7 @@ class PipelineNominationsService:
         columns: list[ColumnMeta],
         key_of: Callable[[_Flow], str],
         show_last: int | None = None,
-        change_within_group: bool = False,
+        skip_blank: bool = False,
         days_per_column: dict[str, int] | None = None,
     ) -> MatrixTable:
         """Volume per facility and pipeline for each column, with % change on the previous column.
@@ -383,7 +382,6 @@ class PipelineNominationsService:
         # % change is computed over every column first, so the first visible column still has
         # a previous value to compare with.
         keep = slice(-show_last, None) if show_last else slice(None)
-        groups = [c.group for c in columns] if change_within_group else None
         width = len(columns)
 
         facility_rows: list[FacilityRow] = []
@@ -407,10 +405,11 @@ class PipelineNominationsService:
                 FacilityRow(
                     name=facility,
                     region=region_of(facility),
-                    cells=_cells(totals, totals_carried, keep, groups),
+                    cells=_cells(totals, totals_carried, keep, skip_blank),
                     pipelines=[
                         PipelineRow(
-                            name=p, cells=_cells(values[p], carried[p], keep, groups)
+                            name=p,
+                            cells=_cells(values[p], carried[p], keep, skip_blank),
                         )
                         for p in names
                     ],
@@ -432,7 +431,7 @@ class PipelineNominationsService:
             region_totals.append(
                 RegionTotal(
                     region=region,
-                    cells=_cells(region_values, region_carried, keep, groups),
+                    cells=_cells(region_values, region_carried, keep, skip_blank),
                 )
             )
 
@@ -444,5 +443,5 @@ class PipelineNominationsService:
             columns=columns[keep],
             facilities=facility_rows,
             region_totals=region_totals,
-            total=_cells(grand_total, grand_carried, keep, groups),
+            total=_cells(grand_total, grand_carried, keep, skip_blank),
         )

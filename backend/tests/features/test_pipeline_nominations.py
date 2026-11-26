@@ -5,6 +5,7 @@ import pytest
 
 from app.features.pipeline_nominations.service import (
     PipelineNominationsService,
+    _cells,
     region_of,
 )
 
@@ -30,6 +31,30 @@ def _row(
 
 def _service(rows: list[dict[str, Any]]) -> PipelineNominationsService:
     return PipelineNominationsService(_FakeRepo(rows))  # type: ignore[arg-type]
+
+
+def test_cycle_change_skips_unpublished_cycles_and_crosses_days() -> None:
+    # Two days of four cycles; the first day has no second cycle and the second day no third.
+    values = [2.0, None, 3.0, 3.3, 5.0, 5.5, None, 6.6]
+
+    cells = _cells(values, [False] * 8, slice(None), skip_blank=True)
+
+    assert [c.change_pct for c in cells] == [
+        None,
+        None,
+        50.0,
+        10.0,
+        51.5,
+        10.0,
+        None,
+        20.0,
+    ]
+
+
+def test_other_views_compare_with_the_adjacent_column_only() -> None:
+    cells = _cells([2.0, None, 3.0], [False] * 3, slice(None), skip_blank=False)
+
+    assert [c.change_pct for c in cells] == [None, None, None]
 
 
 def test_region_of_puts_canada_and_costa_azul_outside_the_us() -> None:
