@@ -15,8 +15,12 @@ import { Route as LayoutPipeline_nominationsRouteImport } from './routes/_layout
 import { Route as LayoutNewsletterRouteImport } from './routes/_layout/newsletter'
 import { Route as LayoutNews_summary_condensedRouteImport } from './routes/_layout/news_summary_condensed'
 import { Route as LayoutNews_summaryRouteImport } from './routes/_layout/news_summary'
+import { Route as LayoutNewsRouteImport } from './routes/_layout/news'
 import { Route as LayoutMid_term_curvesRouteImport } from './routes/_layout/mid_term_curves'
 import { Route as LayoutLng_balanceRouteImport } from './routes/_layout/lng_balance'
+import { Route as LayoutNewsIndexRouteImport } from './routes/_layout/news/index'
+import { Route as LayoutNewsSummaryRouteImport } from './routes/_layout/news/summary'
+import { Route as LayoutNewsNewsletterRouteImport } from './routes/_layout/news/newsletter'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -49,6 +53,11 @@ const LayoutNews_summaryRoute = LayoutNews_summaryRouteImport.update({
   path: '/news_summary',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutNewsRoute = LayoutNewsRouteImport.update({
+  id: '/news',
+  path: '/news',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutMid_term_curvesRoute = LayoutMid_term_curvesRouteImport.update({
   id: '/mid_term_curves',
   path: '/mid_term_curves',
@@ -59,15 +68,34 @@ const LayoutLng_balanceRoute = LayoutLng_balanceRouteImport.update({
   path: '/lng_balance',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutNewsIndexRoute = LayoutNewsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LayoutNewsRoute,
+} as any)
+const LayoutNewsSummaryRoute = LayoutNewsSummaryRouteImport.update({
+  id: '/summary',
+  path: '/summary',
+  getParentRoute: () => LayoutNewsRoute,
+} as any)
+const LayoutNewsNewsletterRoute = LayoutNewsNewsletterRouteImport.update({
+  id: '/newsletter',
+  path: '/newsletter',
+  getParentRoute: () => LayoutNewsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
   '/lng_balance': typeof LayoutLng_balanceRoute
   '/mid_term_curves': typeof LayoutMid_term_curvesRoute
+  '/news': typeof LayoutNewsRouteWithChildren
   '/news_summary': typeof LayoutNews_summaryRoute
   '/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
   '/newsletter': typeof LayoutNewsletterRoute
   '/pipeline_nominations': typeof LayoutPipeline_nominationsRoute
+  '/news/newsletter': typeof LayoutNewsNewsletterRoute
+  '/news/summary': typeof LayoutNewsSummaryRoute
+  '/news/': typeof LayoutNewsIndexRoute
 }
 export interface FileRoutesByTo {
   '/lng_balance': typeof LayoutLng_balanceRoute
@@ -77,17 +105,24 @@ export interface FileRoutesByTo {
   '/newsletter': typeof LayoutNewsletterRoute
   '/pipeline_nominations': typeof LayoutPipeline_nominationsRoute
   '/': typeof LayoutIndexRoute
+  '/news/newsletter': typeof LayoutNewsNewsletterRoute
+  '/news/summary': typeof LayoutNewsSummaryRoute
+  '/news': typeof LayoutNewsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
   '/_layout/lng_balance': typeof LayoutLng_balanceRoute
   '/_layout/mid_term_curves': typeof LayoutMid_term_curvesRoute
+  '/_layout/news': typeof LayoutNewsRouteWithChildren
   '/_layout/news_summary': typeof LayoutNews_summaryRoute
   '/_layout/news_summary_condensed': typeof LayoutNews_summary_condensedRoute
   '/_layout/newsletter': typeof LayoutNewsletterRoute
   '/_layout/pipeline_nominations': typeof LayoutPipeline_nominationsRoute
   '/_layout/': typeof LayoutIndexRoute
+  '/_layout/news/newsletter': typeof LayoutNewsNewsletterRoute
+  '/_layout/news/summary': typeof LayoutNewsSummaryRoute
+  '/_layout/news/': typeof LayoutNewsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -95,10 +130,14 @@ export interface FileRouteTypes {
     | '/'
     | '/lng_balance'
     | '/mid_term_curves'
+    | '/news'
     | '/news_summary'
     | '/news_summary_condensed'
     | '/newsletter'
     | '/pipeline_nominations'
+    | '/news/newsletter'
+    | '/news/summary'
+    | '/news/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/lng_balance'
@@ -108,16 +147,23 @@ export interface FileRouteTypes {
     | '/newsletter'
     | '/pipeline_nominations'
     | '/'
+    | '/news/newsletter'
+    | '/news/summary'
+    | '/news'
   id:
     | '__root__'
     | '/_layout'
     | '/_layout/lng_balance'
     | '/_layout/mid_term_curves'
+    | '/_layout/news'
     | '/_layout/news_summary'
     | '/_layout/news_summary_condensed'
     | '/_layout/newsletter'
     | '/_layout/pipeline_nominations'
     | '/_layout/'
+    | '/_layout/news/newsletter'
+    | '/_layout/news/summary'
+    | '/_layout/news/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -168,6 +214,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutNews_summaryRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/news': {
+      id: '/_layout/news'
+      path: '/news'
+      fullPath: '/news'
+      preLoaderRoute: typeof LayoutNewsRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/mid_term_curves': {
       id: '/_layout/mid_term_curves'
       path: '/mid_term_curves'
@@ -182,12 +235,50 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutLng_balanceRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/news/': {
+      id: '/_layout/news/'
+      path: '/'
+      fullPath: '/news/'
+      preLoaderRoute: typeof LayoutNewsIndexRouteImport
+      parentRoute: typeof LayoutNewsRoute
+    }
+    '/_layout/news/summary': {
+      id: '/_layout/news/summary'
+      path: '/summary'
+      fullPath: '/news/summary'
+      preLoaderRoute: typeof LayoutNewsSummaryRouteImport
+      parentRoute: typeof LayoutNewsRoute
+    }
+    '/_layout/news/newsletter': {
+      id: '/_layout/news/newsletter'
+      path: '/newsletter'
+      fullPath: '/news/newsletter'
+      preLoaderRoute: typeof LayoutNewsNewsletterRouteImport
+      parentRoute: typeof LayoutNewsRoute
+    }
   }
 }
+
+interface LayoutNewsRouteChildren {
+  LayoutNewsNewsletterRoute: typeof LayoutNewsNewsletterRoute
+  LayoutNewsSummaryRoute: typeof LayoutNewsSummaryRoute
+  LayoutNewsIndexRoute: typeof LayoutNewsIndexRoute
+}
+
+const LayoutNewsRouteChildren: LayoutNewsRouteChildren = {
+  LayoutNewsNewsletterRoute: LayoutNewsNewsletterRoute,
+  LayoutNewsSummaryRoute: LayoutNewsSummaryRoute,
+  LayoutNewsIndexRoute: LayoutNewsIndexRoute,
+}
+
+const LayoutNewsRouteWithChildren = LayoutNewsRoute._addFileChildren(
+  LayoutNewsRouteChildren,
+)
 
 interface LayoutRouteChildren {
   LayoutLng_balanceRoute: typeof LayoutLng_balanceRoute
   LayoutMid_term_curvesRoute: typeof LayoutMid_term_curvesRoute
+  LayoutNewsRoute: typeof LayoutNewsRouteWithChildren
   LayoutNews_summaryRoute: typeof LayoutNews_summaryRoute
   LayoutNews_summary_condensedRoute: typeof LayoutNews_summary_condensedRoute
   LayoutNewsletterRoute: typeof LayoutNewsletterRoute
@@ -198,6 +289,7 @@ interface LayoutRouteChildren {
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutLng_balanceRoute: LayoutLng_balanceRoute,
   LayoutMid_term_curvesRoute: LayoutMid_term_curvesRoute,
+  LayoutNewsRoute: LayoutNewsRouteWithChildren,
   LayoutNews_summaryRoute: LayoutNews_summaryRoute,
   LayoutNews_summary_condensedRoute: LayoutNews_summary_condensedRoute,
   LayoutNewsletterRoute: LayoutNewsletterRoute,

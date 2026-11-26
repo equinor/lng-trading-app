@@ -8,6 +8,7 @@ type UserPublic = {
   name?: string
   full_name?: string
   is_superuser?: boolean
+  is_admin?: boolean
 }
 
 // Radix's OAuth2 proxy guarantees the user is authenticated before the app

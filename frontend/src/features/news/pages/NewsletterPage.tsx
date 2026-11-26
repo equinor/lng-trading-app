@@ -629,14 +629,14 @@ function Newsletter() {
             <CardContent className="pt-0">
               <div className="flex flex-col gap-2 text-sm">
                 <RouterLink
-                  to="/news_summary"
+                  to="/news"
                   className="rounded-md border px-3 py-2 hover:bg-muted transition-colors"
                 >
                   News Summary
                 </RouterLink>
 
                 <RouterLink
-                  to="/newsletter"
+                  to="/news/newsletter"
                   className="rounded-md border px-3 py-2 hover:bg-muted transition-colors"
                 >
                   Newsletter (this page)

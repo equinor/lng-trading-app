@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 
-import { NewsletterPage } from "@/features/news/pages/NewsletterPage"
-
+// Legacy URL: the newsletter now lives as a tab under /news.
 export const Route = createFileRoute("/_layout/newsletter")({
-  component: NewsletterPage,
-  head: () => ({ meta: [{ title: "Newsletter - LNG Trading App" }] }),
+  beforeLoad: () => {
+    throw redirect({ to: "/news/newsletter", replace: true })
+  },
 })

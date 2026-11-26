@@ -49,7 +49,10 @@ export function Main({ items, className }: MainProps) {
               return <SidebarSeparator key={item.key} />
             }
 
-            const isActive = currentPath === item.path
+            // Section items (e.g. /news) stay highlighted on their child routes.
+            const isActive =
+              currentPath === item.path ||
+              (item.path !== "/" && currentPath.startsWith(`${item.path}/`))
 
             return (
               <SidebarMenuItem key={item.title}>

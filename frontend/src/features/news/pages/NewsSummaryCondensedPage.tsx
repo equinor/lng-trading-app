@@ -144,7 +144,7 @@ function NewsSummaryCondensed() {
   }
 
   return (
-    <div className="flex flex-col gap-2 h-[calc(100vh-6rem)]" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>
+    <div className="flex flex-col gap-2 h-full min-h-0" style={{ fontFamily: "Equinor, Inter, sans-serif" }}>
       <div className="flex flex-wrap items-center justify-between gap-4 shrink-0">
         <h1 className="text-lg font-bold tracking-tight">
           LNG market news / sentiment (condensed)
