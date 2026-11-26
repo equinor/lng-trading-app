@@ -13,12 +13,17 @@ import type {
   FacilityRow,
   MatrixCell,
   MatrixTable,
+  PipelineRow,
+  Region,
 } from "@/features/pipeline_nominations/api"
 import {
   formatBcf,
   formatDay,
   formatPct,
   pctDirection,
+  REGION_LABEL,
+  REGIONS,
+  regionIndex,
 } from "@/features/pipeline_nominations/utils"
 import { cn } from "@/lib/utils"
 
@@ -106,6 +111,10 @@ function newestFirst(table: MatrixTable): MatrixTable {
     ...table,
     columns: [...table.columns].reverse(),
     total: reversed(table.total),
+    region_totals: table.region_totals.map((region) => ({
+      ...region,
+      cells: reversed(region.cells),
+    })),
     facilities: table.facilities.map((facility) => ({
       ...facility,
       cells: reversed(facility.cells),
@@ -116,6 +125,26 @@ function newestFirst(table: MatrixTable): MatrixTable {
     })),
   }
 }
+
+// Facilities sit under a header per region; each region ends with its subtotal when there is
+// more than one region in view. `zebra` counts only the facility and pipeline rows.
+type BodyRow =
+  | { kind: "region"; region: Region }
+  | {
+      kind: "facility"
+      facility: FacilityRow
+      greyedOut: boolean
+      open: boolean
+      zebra: number
+    }
+  | {
+      kind: "pipeline"
+      facility: string
+      pipeline: PipelineRow
+      greyedOut: boolean
+      zebra: number
+    }
+  | { kind: "subtotal"; region: Region; cells: MatrixCell[] }
 
 export function NominationsMatrix({
   table: source,
@@ -138,28 +167,47 @@ export function NominationsMatrix({
           greyedOut: false,
         })),
         ...unavailable.map((facility) => ({ facility, greyedOut: true })),
-      ].sort((a, b) => a.facility.name.localeCompare(b.facility.name)),
+      ].sort(
+        (a, b) =>
+          regionIndex(a.facility.region) - regionIndex(b.facility.region) ||
+          a.facility.name.localeCompare(b.facility.name),
+      ),
     [table.facilities, unavailable],
   )
 
-  const bodyRows = useMemo(
-    () =>
-      rows.flatMap(({ facility, greyedOut }) => {
-        const open = expanded.has(facility.name)
-        return [
-          { kind: "facility" as const, facility, greyedOut, open },
-          ...(open
-            ? facility.pipelines.map((pipeline) => ({
-                kind: "pipeline" as const,
-                facility: facility.name,
-                pipeline,
-                greyedOut,
-              }))
-            : []),
-        ]
-      }),
-    [rows, expanded],
-  )
+  const bodyRows = useMemo(() => {
+    const present = REGIONS.filter((region) =>
+      rows.some((row) => row.facility.region === region),
+    )
+    const showSubtotals = present.length > 1
+    let zebra = 0
+    return present.flatMap<BodyRow>((region) => {
+      const subtotal = table.region_totals.find((t) => t.region === region)
+      return [
+        { kind: "region", region },
+        ...rows
+          .filter((row) => row.facility.region === region)
+          .flatMap<BodyRow>(({ facility, greyedOut }) => {
+            const open = expanded.has(facility.name)
+            return [
+              { kind: "facility", facility, greyedOut, open, zebra: zebra++ },
+              ...(open
+                ? facility.pipelines.map<BodyRow>((pipeline) => ({
+                    kind: "pipeline",
+                    facility: facility.name,
+                    pipeline,
+                    greyedOut,
+                    zebra: zebra++,
+                  }))
+                : []),
+            ]
+          }),
+        ...(showSubtotals && subtotal
+          ? [{ kind: "subtotal" as const, region, cells: subtotal.cells }]
+          : []),
+      ]
+    })
+  }, [rows, expanded, table.region_totals])
 
   const toggle = (name: string) => {
     const next = new Set(expanded)
@@ -260,9 +308,45 @@ export function NominationsMatrix({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {bodyRows.map((row, index) => {
+          {bodyRows.map((row) => {
+            if (row.kind === "region") {
+              return (
+                <TableRow
+                  key={`region::${row.region}`}
+                  className="border-t-2 bg-muted/60 hover:bg-muted/60"
+                >
+                  <TableCell className="sticky left-0 z-10 border-r bg-muted px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {REGION_LABEL[row.region]}
+                  </TableCell>
+                  <TableCell colSpan={columns.length * 2} className="py-1" />
+                </TableRow>
+              )
+            }
+
+            if (row.kind === "subtotal") {
+              return (
+                <TableRow
+                  key={`subtotal::${row.region}`}
+                  className="border-t bg-secondary/60 font-semibold"
+                >
+                  <TableCell className="sticky left-0 z-10 border-r bg-secondary px-3 py-1.5 text-xs">
+                    {REGION_LABEL[row.region]} total
+                  </TableCell>
+                  {columns.map((column, i) => (
+                    <CellPair
+                      key={column.key}
+                      cell={row.cells[i]}
+                      partial={column.partial}
+                      groupStart={startsGroup(i)}
+                      bold
+                    />
+                  ))}
+                </TableRow>
+              )
+            }
+
             // Alternate colours over the visible rows; sticky cells need the same opaque colour.
-            const zebra = index % 2 === 0 ? "bg-background" : "bg-muted"
+            const zebra = row.zebra % 2 === 0 ? "bg-background" : "bg-muted"
             const grey = row.greyedOut && "text-muted-foreground opacity-50"
             const title = row.greyedOut ? unavailableReason : undefined
             const cellsOf = (cells: MatrixCell[]) =>

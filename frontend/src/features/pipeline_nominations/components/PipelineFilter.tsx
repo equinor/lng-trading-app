@@ -7,6 +7,7 @@ import {
   type FacilityFilter,
   selectionToken,
 } from "@/features/pipeline_nominations/api"
+import { REGION_LABEL, REGIONS } from "@/features/pipeline_nominations/utils"
 
 type Props = {
   facilities: FacilityFilter[]
@@ -15,7 +16,7 @@ type Props = {
   colorOf: (name: string) => string
 }
 
-/** Facility checkboxes that expand to their pipelines. Nothing selected means everything. */
+/** Facility checkboxes grouped by region that expand to their pipelines. Nothing selected means everything. */
 export function PipelineFilter({
   facilities,
   selected,
@@ -46,6 +47,11 @@ export function PipelineFilter({
     onChange(next)
   }
 
+  const regions = REGIONS.map((region) => ({
+    region,
+    facilities: facilities.filter((f) => f.region === region),
+  })).filter((group) => group.facilities.length > 0)
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
@@ -56,76 +62,97 @@ export function PipelineFilter({
           </Button>
         )}
       </div>
-      <ul className="flex flex-col gap-1">
-        {facilities.map((facility, index) => {
-          const tokens = facility.pipelines.map((p) =>
-            selectionToken(facility.name, p),
-          )
-          const count = tokens.filter((t) => selected.has(t)).length
-          const checked =
-            count === tokens.length ? true : count > 0 ? "indeterminate" : false
-          const isOpen = expanded.has(facility.name)
-          const facilityId = `facility-${index}`
+      <div className="flex flex-col gap-3">
+        {regions.map((group) => (
+          <section
+            key={group.region}
+            className="flex flex-col gap-1"
+            aria-label={`${REGION_LABEL[group.region]} facilities`}
+          >
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {REGION_LABEL[group.region]}
+            </h3>
+            <ul className="flex flex-col gap-1">
+              {group.facilities.map((facility) => {
+                const index = facilities.indexOf(facility)
+                const tokens = facility.pipelines.map((p) =>
+                  selectionToken(facility.name, p),
+                )
+                const count = tokens.filter((t) => selected.has(t)).length
+                const checked =
+                  count === tokens.length
+                    ? true
+                    : count > 0
+                      ? "indeterminate"
+                      : false
+                const isOpen = expanded.has(facility.name)
+                const facilityId = `facility-${index}`
 
-          return (
-            <li key={facility.name}>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="text-muted-foreground hover:text-foreground"
-                  aria-expanded={isOpen}
-                  aria-label={`${isOpen ? "Collapse" : "Expand"} ${facility.name}`}
-                  onClick={() => toggleExpanded(facility.name)}
-                >
-                  {isOpen ? (
-                    <ChevronDown className="size-4" />
-                  ) : (
-                    <ChevronRight className="size-4" />
-                  )}
-                </button>
-                <Checkbox
-                  id={facilityId}
-                  checked={checked}
-                  onCheckedChange={() =>
-                    toggleFacility(facility, checked === true)
-                  }
-                />
-                <span
-                  aria-hidden="true"
-                  className="size-2.5 shrink-0 rounded-full"
-                  style={{ background: colorOf(facility.name) }}
-                />
-                <label htmlFor={facilityId} className="cursor-pointer text-sm">
-                  {facility.name}
-                </label>
-              </div>
-              {isOpen && (
-                <ul className="mt-1 ml-6 flex flex-col gap-1 border-l pl-3">
-                  {facility.pipelines.map((pipeline, pipelineIndex) => {
-                    const token = selectionToken(facility.name, pipeline)
-                    const id = `${facilityId}-pipeline-${pipelineIndex}`
-                    return (
-                      <li key={token} className="flex items-center gap-2">
-                        <Checkbox
-                          id={id}
-                          checked={selected.has(token)}
-                          onCheckedChange={() => togglePipeline(token)}
-                        />
-                        <label
-                          htmlFor={id}
-                          className="cursor-pointer text-xs text-muted-foreground"
-                        >
-                          {pipeline}
-                        </label>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </li>
-          )
-        })}
-      </ul>
+                return (
+                  <li key={facility.name}>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground"
+                        aria-expanded={isOpen}
+                        aria-label={`${isOpen ? "Collapse" : "Expand"} ${facility.name}`}
+                        onClick={() => toggleExpanded(facility.name)}
+                      >
+                        {isOpen ? (
+                          <ChevronDown className="size-4" />
+                        ) : (
+                          <ChevronRight className="size-4" />
+                        )}
+                      </button>
+                      <Checkbox
+                        id={facilityId}
+                        checked={checked}
+                        onCheckedChange={() =>
+                          toggleFacility(facility, checked === true)
+                        }
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{ background: colorOf(facility.name) }}
+                      />
+                      <label
+                        htmlFor={facilityId}
+                        className="cursor-pointer text-sm"
+                      >
+                        {facility.name}
+                      </label>
+                    </div>
+                    {isOpen && (
+                      <ul className="mt-1 ml-6 flex flex-col gap-1 border-l pl-3">
+                        {facility.pipelines.map((pipeline, pipelineIndex) => {
+                          const token = selectionToken(facility.name, pipeline)
+                          const id = `${facilityId}-pipeline-${pipelineIndex}`
+                          return (
+                            <li key={token} className="flex items-center gap-2">
+                              <Checkbox
+                                id={id}
+                                checked={selected.has(token)}
+                                onCheckedChange={() => togglePipeline(token)}
+                              />
+                              <label
+                                htmlFor={id}
+                                className="cursor-pointer text-xs text-muted-foreground"
+                              >
+                                {pipeline}
+                              </label>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
     </div>
   )
 }

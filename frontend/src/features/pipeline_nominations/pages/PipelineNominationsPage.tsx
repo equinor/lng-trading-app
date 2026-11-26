@@ -28,7 +28,7 @@ const ONE_HOUR = 60 * 60_000
 
 const TITLE = "US Daily Pipeline Nominations (Monthly)"
 const DESCRIPTION =
-  "Pipeline nominations to LNG plants from the gold feedgas tracking table: WoodMac Genscape for most plants, and Platts for Costa Azul and LNG Canada, whose cycles are inferred from publish time. The monthly and daily views use the latest cycle of each day."
+  "Pipeline nominations to LNG plants from the gold feedgas tracking table: WoodMac Genscape for most plants, and Platts for Costa Azul and LNG Canada, whose cycles are inferred from publish time. US plants are listed first, with LNG Canada and Costa Azul in a separate Non-US group with its own subtotal. The monthly and daily views use the latest cycle of each day."
 
 const PERIOD_SUBTITLE: Record<MatrixPeriod, string> = {
   day: "Daily volumes for the last 14 days and change on the previous day. Newest on the left.",

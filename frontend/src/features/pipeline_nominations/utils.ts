@@ -1,4 +1,14 @@
-import type { CycleSeries, DailySeries } from "./api"
+import type { CycleSeries, DailySeries, Region } from "./api"
+
+/** Display order of the regions: US plants, then LNG Canada and Costa Azul. */
+export const REGIONS: Region[] = ["US", "Non-US"]
+
+export const REGION_LABEL: Record<Region, string> = {
+  US: "US",
+  "Non-US": "Non-US (Canada & Mexico)",
+}
+
+export const regionIndex = (region: Region) => REGIONS.indexOf(region)
 
 /** A line per facility; `x` is a day (YYYY-MM-DD). */
 export type ChartSeries = {

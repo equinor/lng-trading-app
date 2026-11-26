@@ -5,7 +5,7 @@ import datetime as dt
 import threading
 import time
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from app.core.cache import TTLCache
@@ -29,6 +29,7 @@ from app.features.pipeline_nominations.schemas import (
     MatrixTable,
     OverviewResponse,
     PipelineRow,
+    RegionTotal,
 )
 
 # The table is small and changes daily, so one cached snapshot serves every filter combination.
@@ -55,7 +56,22 @@ _CYCLE_CHART_DAYS = 7
 # Generated overviews are kept for an hour so repeated clicks do not call the model again.
 _AI_TTL = 3600.0
 
+# The gold table covers the US plants plus these two (LNG Canada and Costa Azul LNG in Mexico),
+# which the page shows apart from the US ones. Matched by substring so a renamed plant still fits.
+_NON_US_PLANTS = ("lng canada", "costa azul")
+REGIONS = ("US", "Non-US")
+
 Selection = set[tuple[str, str]]  # (facility, pipeline); empty means everything
+
+
+def region_of(facility: str) -> str:
+    lowered = facility.lower()
+    return "Non-US" if any(p in lowered for p in _NON_US_PLANTS) else "US"
+
+
+def _by_region(facilities: Iterable[str]) -> list[str]:
+    """US facilities first, then the rest, alphabetical within each region."""
+    return sorted(facilities, key=lambda name: (REGIONS.index(region_of(name)), name))
 
 
 @dataclass(frozen=True)
@@ -117,7 +133,7 @@ def _sum_or_none(values: list[float | None]) -> float | None:
 
 
 def _empty_table() -> MatrixTable:
-    return MatrixTable(columns=[], facilities=[], total=[])
+    return MatrixTable(columns=[], facilities=[], region_totals=[], total=[])
 
 
 class PipelineNominationsService:
@@ -169,8 +185,10 @@ class PipelineNominationsService:
         return FiltersResponse(
             latest_date=max((f.day for f in flows), default=None),
             facilities=[
-                FacilityFilter(name=name, pipelines=sorted(names))
-                for name, names in sorted(pipelines.items())
+                FacilityFilter(
+                    name=name, region=region_of(name), pipelines=sorted(pipelines[name])
+                )
+                for name in _by_region(pipelines)
             ],
         )
 
@@ -371,7 +389,7 @@ class PipelineNominationsService:
         facility_rows: list[FacilityRow] = []
         facility_values: list[list[float | None]] = []
         facility_carried: list[list[bool]] = []
-        for facility in sorted(pipelines):
+        for facility in _by_region(pipelines):
             names = sorted(pipelines[facility])
             values = {
                 p: [sums.get((facility, p, c.key)) for c in columns] for p in names
@@ -388,6 +406,7 @@ class PipelineNominationsService:
             facility_rows.append(
                 FacilityRow(
                     name=facility,
+                    region=region_of(facility),
                     cells=_cells(totals, totals_carried, keep, groups),
                     pipelines=[
                         PipelineRow(
@@ -398,6 +417,25 @@ class PipelineNominationsService:
                 )
             )
 
+        region_totals: list[RegionTotal] = []
+        for region in REGIONS:
+            members = [i for i, row in enumerate(facility_rows) if row.region == region]
+            if not members:
+                continue
+            region_values = [
+                _sum_or_none([facility_values[i][c] for i in members])
+                for c in range(width)
+            ]
+            region_carried = [
+                any(facility_carried[i][c] for i in members) for c in range(width)
+            ]
+            region_totals.append(
+                RegionTotal(
+                    region=region,
+                    cells=_cells(region_values, region_carried, keep, groups),
+                )
+            )
+
         grand_total = [
             _sum_or_none([v[i] for v in facility_values]) for i in range(width)
         ]
@@ -405,5 +443,6 @@ class PipelineNominationsService:
         return MatrixTable(
             columns=columns[keep],
             facilities=facility_rows,
+            region_totals=region_totals,
             total=_cells(grand_total, grand_carried, keep, groups),
         )
