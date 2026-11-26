@@ -37,6 +37,7 @@ _SUBMIT = ", ".join(
     ]
 )
 _STEP_TIMEOUT_MS = 15_000
+_SSO_WAIT_SECONDS = 60
 
 
 class SignInFailed(Exception):
@@ -45,14 +46,16 @@ class SignInFailed(Exception):
 
 @dataclass
 class Session:
-    browser: Browser
+    # None when the browser was opened with a persistent profile, which has no separate browser.
+    browser: Browser | None
     context: BrowserContext
     page: Page
     method: str
 
     async def close(self) -> None:
         await self.context.close()
-        await self.browser.close()
+        if self.browser is not None:
+            await self.browser.close()
 
 
 async def _open(
@@ -90,11 +93,20 @@ async def load_map(page: Page, settings: CollectorSettings) -> None:
         pass
 
 
+async def _keep_signed_in(page: Page) -> None:
+    """Tick "Keep me signed in" so the session lasts beyond a short idle period."""
+    try:
+        await page.get_by_label("Keep me signed in").check(force=True, timeout=3_000)
+    except Exception:
+        logger.debug("No 'Keep me signed in' option found", exc_info=True)
+
+
 async def _fill_credentials(page: Page, username: str, password: str) -> None:
     """Handles one-page and two-step (username, then password) sign-in forms."""
     user_field = page.locator(_USERNAME).first
     await user_field.wait_for(state="visible", timeout=_STEP_TIMEOUT_MS)
     await user_field.fill(username)
+    await _keep_signed_in(page)
     if (
         await page.locator(_PASSWORD).count() == 0
         or not await page.locator(_PASSWORD).first.is_visible()
@@ -103,6 +115,7 @@ async def _fill_credentials(page: Page, username: str, password: str) -> None:
     password_field = page.locator(_PASSWORD).first
     await password_field.wait_for(state="visible", timeout=_STEP_TIMEOUT_MS)
     await password_field.fill(password)
+    await _keep_signed_in(page)
     await page.locator(_SUBMIT).first.click()
 
     # Microsoft-style "Stay signed in?" prompt, if it appears.
@@ -110,6 +123,18 @@ async def _fill_credentials(page: Page, username: str, password: str) -> None:
         await page.locator("#idSIButton9").click(timeout=5_000)
     except PlaywrightTimeout:
         pass
+
+
+async def _sign_in_hint(page: Page) -> str:
+    """What the sign-in page says, to tell a wrong password from MFA in the logs."""
+    errors = await page.locator(
+        ".o-form-error-container, .okta-form-infobox-error, [role=alert]"
+    ).all_inner_texts()
+    text = " ".join(" ".join(errors).split())
+    if not text:
+        text = " ".join((await page.inner_text("body")).split())
+    path = urlparse(page.url).path
+    return f"at {urlparse(page.url).netloc}{path}: {text[:200]!r}"
 
 
 async def _service_account(
@@ -124,12 +149,19 @@ async def _service_account(
             await _fill_credentials(
                 page, settings.WOODMAC_USERNAME, settings.WOODMAC_PASSWORD
             )
-            await page.wait_for_load_state("networkidle", timeout=30_000)
+            try:
+                await page.wait_for_url(
+                    lambda url: urlparse(url).netloc
+                    == urlparse(settings.WOODMAC_MAP_URL).netloc,
+                    timeout=30_000,
+                )
+            except PlaywrightTimeout:
+                raise SignInFailed(
+                    f"the form did not sign in {await _sign_in_hint(page)}"
+                ) from None
             await load_map(page, settings)
         if await needs_sign_in(page, settings):
-            raise SignInFailed(
-                "still on the sign-in page (MFA, captcha or changed form?)"
-            )
+            raise SignInFailed(f"still on the sign-in page {await _sign_in_hint(page)}")
         return Session(browser, context, page, "service account")
     except Exception as error:
         logger.warning("Service-account sign-in failed: %s", error)
@@ -178,9 +210,71 @@ async def _saved_session(
     return None
 
 
+async def _enter_sso_username(page: Page, settings: CollectorSettings) -> None:
+    """Give WoodMac's sign-on page the user name, which sends the login on to Equinor."""
+    if not settings.FLARE_SSO_USERNAME:
+        return
+    field = page.locator(
+        "input[name=identifier], #idp-discovery-username, input[name=username]"
+    ).first
+    try:
+        if await field.count() == 0 or not await field.is_visible():
+            return
+        if (await field.input_value()).strip():
+            return
+        await field.fill(settings.FLARE_SSO_USERNAME)
+        await _keep_signed_in(page)
+        await field.press("Enter")
+    except Exception:
+        logger.debug("Could not enter the sign-on user name", exc_info=True)
+
+
+async def _browser_profile(
+    playwright: Playwright, settings: CollectorSettings
+) -> Session | None:
+    """Use the machine's own browser profile, so its single sign-in does the login.
+
+    On a managed Windows laptop, Edge signs in to WoodMac through Equinor sign-on without asking
+    for anything. The browser keeps WoodMac's login in the profile, so close it cleanly: the
+    renewed login is only written when the browser shuts down.
+    """
+    if not settings.FLARE_BROWSER_PROFILE:
+        return None
+    try:
+        context = await playwright.chromium.launch_persistent_context(
+            user_data_dir=str(Path(settings.FLARE_BROWSER_PROFILE).resolve()),
+            channel=settings.FLARE_BROWSER_CHANNEL or None,
+            headless=not settings.FLARE_HEADED,
+            args=["--disable-dev-shm-usage"],
+        )
+    except Exception as error:
+        logger.warning(
+            "Could not open the browser profile (is it already open?): %s", error
+        )
+        return None
+    page = context.pages[0] if context.pages else await context.new_page()
+    try:
+        await load_map(page, settings)
+        # Single sign-on redirects through several pages before landing back on the map.
+        for _ in range(_SSO_WAIT_SECONDS // 3):
+            if not await needs_sign_in(page, settings):
+                break
+            await _enter_sso_username(page, settings)
+            await page.wait_for_timeout(3_000)
+        if await needs_sign_in(page, settings):
+            raise SignInFailed(
+                f"the browser profile is signed out {await _sign_in_hint(page)}"
+            )
+        return Session(None, context, page, "browser profile")
+    except Exception as error:
+        logger.warning("Browser-profile sign-in failed: %s", error)
+        await context.close()
+        return None
+
+
 async def sign_in(playwright: Playwright, settings: CollectorSettings) -> Session:
-    """Sign in with the service account, falling back to the saved session."""
-    for attempt in (_service_account, _saved_session):
+    """Sign in with the browser profile, then the service account, then the saved session."""
+    for attempt in (_browser_profile, _service_account, _saved_session):
         session = await attempt(playwright, settings)
         if session is not None:
             logger.info("Signed in to WoodMac using the %s", session.method)

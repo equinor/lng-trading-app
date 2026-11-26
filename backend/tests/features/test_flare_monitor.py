@@ -6,10 +6,13 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import httpx
 import numpy as np
 import pytest
 from PIL import Image
 
+from app.features.flare_monitor.collector.api_source import WoodMacApi, token_expiry
+from app.features.flare_monitor.collector.api_worker import ApiCollector
 from app.features.flare_monitor.collector.cache import ImageCache
 from app.features.flare_monitor.collector.classifier import (
     CameraConfig,
@@ -267,6 +270,34 @@ def test_missing_camera_survives_a_database_error_and_is_retried(
     assert [event["state"] for event in repository.events] == ["on", "unknown"]
 
 
+def test_restart_keeps_the_last_image_time_when_no_new_images_arrive(
+    tmp_path: Path,
+) -> None:
+    repository = FakeRepository()
+    repository.persisted = {
+        "1577": {
+            "camera_id": "1577",
+            "state": "on",
+            "since": T0,
+            "last_image_at": T0,
+            "last_label": "flare",
+            "last_usable": True,
+            "last_score": 1.0,
+        }
+    }
+    clock = Clock()
+    processor = _processor(tmp_path, repository, '{"1577": {}}', clock)
+    processor.start()
+
+    clock.now += dt.timedelta(minutes=31)
+    processor.check_missing()
+
+    state = repository.states["1577"]
+    assert state["state"] == "unknown"
+    assert state["last_image_at"] == T0
+    assert state["last_label"] == "flare"
+
+
 def test_cameras_found_in_the_database_are_followed_without_a_camera_list(
     tmp_path: Path,
 ) -> None:
@@ -469,3 +500,182 @@ def test_api_reports_a_camera_with_no_recent_image_as_unknown() -> None:
     assert stale.state == "unknown" and stale.stale
 
     assert overview(None).state == "unknown"
+
+
+# --- API mode ---
+
+
+def _jwt(expires: dt.datetime) -> str:
+    import base64
+    import json
+
+    body = base64.urlsafe_b64encode(
+        json.dumps({"exp": expires.timestamp()}).encode()
+    ).decode()
+    return f"x.{body.rstrip('=')}.y"
+
+
+class FakeWoodMac:
+    """A stand-in for the WoodMac camera API, served through httpx's mock transport."""
+
+    def __init__(self, frames: dict[int, list[dt.datetime]]) -> None:
+        self.frames = frames  # API camera id -> frame times
+        self.calls: list[tuple[str, str]] = []
+        self.status = 200
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        self.calls.append((path, request.url.params.get("minTimestamp", "")))
+        if request.url.host == "blob.test":
+            return httpx.Response(200, content=_scene(True, abs(hash(path)) % 1000))
+        if request.headers.get("authorization") != "Bearer good-token":
+            return httpx.Response(401, json={"message": "Unauthorized"})
+        if self.status != 200:
+            return httpx.Response(self.status)
+        if path.endswith("/cameras"):
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "id": api_id,
+                            "cameraName": f"Plant {api_id}",
+                            "referenceImageUrl": f"https://x/reference_image_camera_{1000 + api_id}.jpg?sig=1",
+                        }
+                        for api_id in self.frames
+                    ]
+                },
+            )
+        api_id = int(path.split("/")[-2])
+        since = dt.datetime.strptime(
+            request.url.params["minTimestamp"], "%Y-%m-%dT%H:%M:%SZ"
+        ).replace(tzinfo=dt.timezone.utc)
+        # WoodMac answers with at most a day of frames from minTimestamp.
+        data = [
+            {
+                "cameraId": api_id,
+                "timestamp": t.isoformat(),
+                "url": f"https://blob.test/irimageimages/{1000 + api_id}_{t:%Y%m%d_%H%M%S}.jpg?sig=1",
+            }
+            for t in self.frames[api_id]
+            if since <= t < since + dt.timedelta(hours=24)
+        ]
+        return httpx.Response(200, json={"data": data})
+
+
+class FakeTokenRepository(FakeRepository):
+    def __init__(self, token: str | None, expires: dt.datetime | None) -> None:
+        super().__init__()
+        self.row = (
+            None if token is None else {"access_token": token, "expires_at": expires}
+        )
+
+    def load_token(self) -> dict[str, Any] | None:
+        return self.row
+
+
+def _api_collector(
+    tmp_path: Path, woodmac: FakeWoodMac, repository: FakeTokenRepository, clock: Clock
+):
+    settings = CollectorSettings(
+        FLARE_CAMERAS='{"1001": {"plant": "Plant 1"}, "1002": {"plant": "Plant 2"}}',
+        FLARE_CACHE_DIR=str(tmp_path),
+        FLARE_IMAGE_TIMEZONE="UTC",
+        FLARE_BACKFILL_HOURS=96,
+        FLARE_HOURS_BACK=1,
+    )
+    processor = FlareProcessor(
+        settings,
+        repository,
+        ThermalBlobClassifier(),
+        ImageCache(tmp_path, 6),
+        clock=clock,  # type: ignore[arg-type]
+    )
+    processor.start()
+    api = WoodMacApi(
+        "https://api.test/natgas/iot/v1",
+        httpx.Client(transport=httpx.MockTransport(woodmac.handler)),
+    )
+    return ApiCollector(settings, repository, processor, api, clock=clock), processor  # type: ignore[arg-type]
+
+
+def _frames(start: dt.datetime, end: dt.datetime) -> list[dt.datetime]:
+    out, t = [], start
+    while t < end:
+        out.append(t)
+        t += dt.timedelta(minutes=30)
+    return out
+
+
+def test_api_mode_reads_new_frames_once(tmp_path: Path) -> None:
+    clock = Clock()
+    woodmac = FakeWoodMac(
+        {1: _frames(clock.now - dt.timedelta(minutes=50), clock.now), 2: []}
+    )
+    repository = FakeTokenRepository("good-token", clock.now + dt.timedelta(hours=5))
+    collector, _ = _api_collector(tmp_path, woodmac, repository, clock)
+
+    assert collector.cycle() == 2
+    assert collector.cycle() == 0  # the same frames are not fetched or stored again
+    assert {row["camera_id"] for row in repository.observations} == {"1001"}
+
+
+def test_api_mode_backfills_a_long_gap_in_windows(tmp_path: Path) -> None:
+    clock = Clock()
+    start = clock.now - dt.timedelta(hours=60)
+    woodmac = FakeWoodMac({1: _frames(start, clock.now), 2: []})
+    repository = FakeTokenRepository("good-token", clock.now + dt.timedelta(hours=5))
+    collector, processor = _api_collector(tmp_path, woodmac, repository, clock)
+    processor._newest["1001"] = start  # the last frame stored before the gap
+
+    new = collector.cycle()
+
+    # Every frame in the 60 hours, one every 30 minutes.
+    assert new == 120
+    image_calls = [call for call in woodmac.calls if call[0].endswith("/images")]
+    assert (
+        len(image_calls) > 2
+    )  # more than one request: the API only returns a day at a time
+
+
+def test_api_mode_waits_for_a_usable_token(tmp_path: Path) -> None:
+    clock = Clock()
+    woodmac = FakeWoodMac(
+        {1: _frames(clock.now - dt.timedelta(hours=1), clock.now), 2: []}
+    )
+
+    expired = FakeTokenRepository("good-token", clock.now - dt.timedelta(minutes=1))
+    collector, _ = _api_collector(tmp_path, woodmac, expired, clock)
+    assert collector.cycle() == 0
+
+    missing = FakeTokenRepository(None, None)
+    collector, _ = _api_collector(tmp_path, woodmac, missing, clock)
+    assert collector.cycle() == 0
+    assert woodmac.calls == []  # nothing was asked of WoodMac without a token
+
+
+def test_api_mode_stops_using_a_token_woodmac_rejects(tmp_path: Path) -> None:
+    clock = Clock()
+    woodmac = FakeWoodMac(
+        {1: _frames(clock.now - dt.timedelta(hours=1), clock.now), 2: []}
+    )
+    repository = FakeTokenRepository("revoked-token", clock.now + dt.timedelta(hours=5))
+    collector, _ = _api_collector(tmp_path, woodmac, repository, clock)
+
+    assert collector.cycle() == 0
+    calls_after_first = len(woodmac.calls)
+    assert collector.cycle() == 0
+    assert len(woodmac.calls) == calls_after_first  # the rejected token is not retried
+
+    repository.row = {
+        "access_token": "good-token",
+        "expires_at": clock.now + dt.timedelta(hours=5),
+    }
+    assert collector.cycle() == 2
+
+
+def test_token_expiry_is_read_from_the_token() -> None:
+    expires = dt.datetime(2026, 11, 27, 7, 42, 56, tzinfo=UTC)
+
+    assert token_expiry(_jwt(expires)) == expires
+    assert token_expiry("not a token") is None

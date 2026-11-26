@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, field_validator
@@ -50,11 +50,30 @@ class CollectorSettings(BaseSettings):
     FLARE_FLARE_REQUIRED: int = 2
     FLARE_CLEAR_REQUIRED: int = 3
     FLARE_UNUSABLE_REQUIRED: int = 3
+    # Sign in through a browser profile on this machine (for example an Edge profile on an Equinor
+    # laptop, where Equinor single sign-on logs in without a prompt). Tried before the others.
+    FLARE_BROWSER_PROFILE: str | None = None
+    # Browser to use with the profile, such as "msedge". Empty means Playwright's own Chromium.
+    FLARE_BROWSER_CHANNEL: str | None = None
+    # The email typed on WoodMac's sign-on page when the profile is signed out. Equinor sign-on
+    # then completes by itself on a managed laptop.
+    FLARE_SSO_USERNAME: str | None = None
     # Show the browser (local debugging only).
     FLARE_HEADED: bool = False
     # Start Chromium without its own sandbox. Needed in a container that does not allow user
     # namespaces (Radix); the container itself is non-root and only opens WoodMac.
     FLARE_NO_SANDBOX: bool = False
+
+    # Where the images come from. "browser" signs in to the WoodMac page and reads what it loads.
+    # "api" calls WoodMac's camera API with a login token that `publish_token` stores in
+    # Databricks, so it needs no browser and no WoodMac sign-in (this is the mode for Radix).
+    FLARE_SOURCE: Literal["browser", "api"] = "browser"
+    WOODMAC_API_BASE: str = "https://api.genscape.com/natgas/iot/v1"
+    # A token to use instead of the one in Databricks (for testing).
+    WOODMAC_ACCESS_TOKEN: str | None = None
+    # After a gap (a weekend, a stopped collector) the API mode asks WoodMac for the frames it
+    # missed, going back at most this many hours. WoodMac keeps at least two weeks.
+    FLARE_BACKFILL_HOURS: int = 96
 
     @field_validator("FLARE_IMAGE_TIMEZONE")
     @classmethod

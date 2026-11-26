@@ -71,6 +71,14 @@ class FlareProcessor:
             self._newest[camera_id] = max(
                 self._newest.get(camera_id, taken_at), taken_at
             )
+        # Keep the last image time a camera had before a restart, so a restart that finds no new
+        # images does not wipe it.
+        for camera_id, saved in self._persisted.items():
+            last = saved.get("last_image_at")
+            if last is not None:
+                if last.tzinfo is None:
+                    last = last.replace(tzinfo=dt.timezone.utc)
+                self._newest[camera_id] = max(self._newest.get(camera_id, last), last)
         # With no camera list every camera that has a stored state is followed, so one that stops
         # publishing is still marked unknown.
         for camera_id in self._cameras or self._persisted:
@@ -79,6 +87,15 @@ class FlareProcessor:
             if camera_id not in self._persisted:
                 self._dirty.add(camera_id)
         self.flush()
+
+    def newest(self, camera_id: str) -> dt.datetime | None:
+        """When the camera's newest stored image was taken."""
+        return self._newest.get(camera_id)
+
+    def knows(self, file_name: str) -> bool:
+        """Whether this image was already processed, so it need not be downloaded again."""
+        parsed = parse_image_name(file_name, self._settings.image_timezone)
+        return parsed is not None and (parsed.camera_id, parsed.taken_at) in self._seen
 
     def process_batch(self, images: list[tuple[str, bytes]]) -> int:
         """Handle the images found on one map load, oldest first. Returns how many were new."""
@@ -253,6 +270,7 @@ class FlareProcessor:
     def _save_state(self, tracker: CameraTracker) -> None:
         camera_id = tracker.camera_id
         latest = self._latest.get(camera_id)
+        saved = self._persisted.get(camera_id, {})
         self._repository.save_state(
             {
                 "camera_id": camera_id,
@@ -260,9 +278,9 @@ class FlareProcessor:
                 "state": tracker.state.value,
                 "since": tracker.since,
                 "last_image_at": self._newest.get(camera_id),
-                "last_label": latest.label.value if latest else None,
-                "last_usable": latest.usable if latest else None,
-                "last_score": latest.score if latest else None,
+                "last_label": latest.label.value if latest else saved.get("last_label"),
+                "last_usable": latest.usable if latest else saved.get("last_usable"),
+                "last_score": latest.score if latest else saved.get("last_score"),
                 "updated_at": self._clock(),
             }
         )

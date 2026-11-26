@@ -80,9 +80,20 @@ async def ensure_cameras(page: Page, names: list[str]) -> list[str]:
     if not missing:
         return []
 
-    dialog = page.locator("mat-dialog-container")
-    # With an empty dashboard the page opens the Add Cameras dialog by itself.
-    if await dialog.count() == 0:
+    # A notice dialog ("Join us to ...") can sit on top of the page on a fresh browser profile.
+    notice = page.locator("mat-dialog-container").filter(has_not_text="Add Cameras")
+    for _ in range(await notice.count()):
+        await notice.first.get_by_role(
+            "button", name=re.compile(r"^\s*ok\s*$", re.I)
+        ).click(timeout=5_000)
+        await page.wait_for_timeout(500)
+
+    dialog = page.locator("mat-dialog-container").filter(has_text="Add Cameras")
+    # With an empty dashboard the page opens the Add Cameras dialog by itself, a moment after
+    # loading; otherwise open it from the toolbar.
+    try:
+        await dialog.wait_for(state="visible", timeout=20_000)
+    except PlaywrightTimeout:
         await page.locator("button", has_text=_ADD).first.click()
     select = dialog.locator("select")
     await select.wait_for(state="visible", timeout=15_000)
