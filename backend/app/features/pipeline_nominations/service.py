@@ -5,7 +5,7 @@ import datetime as dt
 import threading
 import time
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from app.core.cache import TTLCache
@@ -29,6 +29,7 @@ from app.features.pipeline_nominations.schemas import (
     MatrixTable,
     OverviewResponse,
     PipelineRow,
+    RegionTotal,
 )
 
 # The table is small and changes daily, so one cached snapshot serves every filter combination.
@@ -55,7 +56,22 @@ _CYCLE_CHART_DAYS = 7
 # Generated overviews are kept for an hour so repeated clicks do not call the model again.
 _AI_TTL = 3600.0
 
+# The gold table covers the US plants plus these two (LNG Canada and Costa Azul LNG in Mexico),
+# which the page shows apart from the US ones. Matched by substring so a renamed plant still fits.
+_NON_US_PLANTS = ("lng canada", "costa azul")
+REGIONS = ("US", "Non-US")
+
 Selection = set[tuple[str, str]]  # (facility, pipeline); empty means everything
+
+
+def region_of(facility: str) -> str:
+    lowered = facility.lower()
+    return "Non-US" if any(p in lowered for p in _NON_US_PLANTS) else "US"
+
+
+def _by_region(facilities: Iterable[str]) -> list[str]:
+    """US facilities first, then the rest, alphabetical within each region."""
+    return sorted(facilities, key=lambda name: (REGIONS.index(region_of(name)), name))
 
 
 @dataclass(frozen=True)
@@ -84,23 +100,22 @@ def _cells(
     values: list[float | None],
     carried: list[bool],
     keep: slice,
-    groups: list[str] | None,
+    skip_blank: bool,
 ) -> list[MatrixCell]:
     """Cells with the % change against the previous column, kept only for the `keep` columns.
 
-    With `groups`, the previous value is forgotten when the group changes, so a new day's
-    first cycle is not compared with the last cycle of the day before.
+    With `skip_blank` (the cycle view), the comparison is with the previous column that has a
+    value, so cycles that were not published are skipped, also across days.
     """
     triples: list[tuple[float | None, float | None, bool]] = []
     previous: float | None = None
     for index, value in enumerate(values):
-        if groups is not None and index > 0 and groups[index] != groups[index - 1]:
-            previous = None
         change = None
         if value is not None and previous:
             change = round((value - previous) / previous * 100, 1)
         triples.append((value, change, carried[index]))
-        previous = value
+        if value is not None or not skip_blank:
+            previous = value
     return [
         MatrixCell(
             bcf=None if value is None else round(value, 4),
@@ -117,7 +132,7 @@ def _sum_or_none(values: list[float | None]) -> float | None:
 
 
 def _empty_table() -> MatrixTable:
-    return MatrixTable(columns=[], facilities=[], total=[])
+    return MatrixTable(columns=[], facilities=[], region_totals=[], total=[])
 
 
 class PipelineNominationsService:
@@ -169,8 +184,10 @@ class PipelineNominationsService:
         return FiltersResponse(
             latest_date=max((f.day for f in flows), default=None),
             facilities=[
-                FacilityFilter(name=name, pipelines=sorted(names))
-                for name, names in sorted(pipelines.items())
+                FacilityFilter(
+                    name=name, region=region_of(name), pipelines=sorted(pipelines[name])
+                )
+                for name in _by_region(pipelines)
             ],
         )
 
@@ -259,7 +276,7 @@ class PipelineNominationsService:
                 columns,
                 _cycle_key,
                 show_last=_CYCLE_TABLE_DAYS * len(_CYCLES),
-                change_within_group=True,
+                skip_blank=True,
             ),
         )
 
@@ -340,7 +357,7 @@ class PipelineNominationsService:
         columns: list[ColumnMeta],
         key_of: Callable[[_Flow], str],
         show_last: int | None = None,
-        change_within_group: bool = False,
+        skip_blank: bool = False,
         days_per_column: dict[str, int] | None = None,
     ) -> MatrixTable:
         """Volume per facility and pipeline for each column, with % change on the previous column.
@@ -365,13 +382,12 @@ class PipelineNominationsService:
         # % change is computed over every column first, so the first visible column still has
         # a previous value to compare with.
         keep = slice(-show_last, None) if show_last else slice(None)
-        groups = [c.group for c in columns] if change_within_group else None
         width = len(columns)
 
         facility_rows: list[FacilityRow] = []
         facility_values: list[list[float | None]] = []
         facility_carried: list[list[bool]] = []
-        for facility in sorted(pipelines):
+        for facility in _by_region(pipelines):
             names = sorted(pipelines[facility])
             values = {
                 p: [sums.get((facility, p, c.key)) for c in columns] for p in names
@@ -388,13 +404,34 @@ class PipelineNominationsService:
             facility_rows.append(
                 FacilityRow(
                     name=facility,
-                    cells=_cells(totals, totals_carried, keep, groups),
+                    region=region_of(facility),
+                    cells=_cells(totals, totals_carried, keep, skip_blank),
                     pipelines=[
                         PipelineRow(
-                            name=p, cells=_cells(values[p], carried[p], keep, groups)
+                            name=p,
+                            cells=_cells(values[p], carried[p], keep, skip_blank),
                         )
                         for p in names
                     ],
+                )
+            )
+
+        region_totals: list[RegionTotal] = []
+        for region in REGIONS:
+            members = [i for i, row in enumerate(facility_rows) if row.region == region]
+            if not members:
+                continue
+            region_values = [
+                _sum_or_none([facility_values[i][c] for i in members])
+                for c in range(width)
+            ]
+            region_carried = [
+                any(facility_carried[i][c] for i in members) for c in range(width)
+            ]
+            region_totals.append(
+                RegionTotal(
+                    region=region,
+                    cells=_cells(region_values, region_carried, keep, skip_blank),
                 )
             )
 
@@ -405,5 +442,6 @@ class PipelineNominationsService:
         return MatrixTable(
             columns=columns[keep],
             facilities=facility_rows,
-            total=_cells(grand_total, grand_carried, keep, groups),
+            region_totals=region_totals,
+            total=_cells(grand_total, grand_carried, keep, skip_blank),
         )

@@ -6,7 +6,7 @@ import type { DefaultLayoutMode, SentimentKey, StoredLayout } from "../src/featu
 test.use({ storageState: { cookies: [], origins: [] } })
 
 const sentiments: SentimentKey[] = ["bullish", "neutral", "bearish"]
-const paths = ["/news_summary", "/news_summary_condensed"]
+const paths = ["/news/summary", "/news"]
 const storageKey = "news-summary-layout-v1"
 const defaultLabels = {
   auto: "Automatic: dominant sentiment",
@@ -38,7 +38,7 @@ async function mockNews(page: Page, dominant: SentimentKey) {
     documentUrl: null,
   }))
   await page.route("**/api/v1/utils/me", (route) => route.fulfill({
-    json: { email: "layout@example.com", is_superuser: false },
+    json: { email: "layout@example.com", is_superuser: false, is_admin: true },
   }))
   await page.route("**/api/v1/news/**", (route) => route.fulfill({ json: { data } }))
 }

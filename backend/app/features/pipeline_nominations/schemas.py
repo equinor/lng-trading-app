@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 class FacilityFilter(BaseModel):
     name: str
+    region: str  # "US" or "Non-US"
     pipelines: list[str]
 
 
@@ -58,13 +59,20 @@ class PipelineRow(BaseModel):
 
 class FacilityRow(BaseModel):
     name: str
+    region: str  # "US" or "Non-US"
     cells: list[MatrixCell]
     pipelines: list[PipelineRow]
 
 
+class RegionTotal(BaseModel):
+    region: str
+    cells: list[MatrixCell]
+
+
 class MatrixTable(BaseModel):
     columns: list[ColumnMeta]
-    facilities: list[FacilityRow]
+    facilities: list[FacilityRow]  # US facilities first, then the rest
+    region_totals: list[RegionTotal]  # only regions with a facility in the table
     total: list[MatrixCell]
 
 

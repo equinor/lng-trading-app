@@ -8,7 +8,9 @@
 # Authorization uses the Azure AD app roles assigned in the Enterprise
 # Application:
 #   - "Reader"  -> may call read (GET) routes
-#   - "Writer"  -> may call write (PATCH/POST) routes (implies read)
+#   - "Writer"  -> may call write (PATCH/POST) routes (implies read). Members of the
+#                  fg_lng_analytics_admins group get this role, so "admin" in the UI
+#                  (e.g. the editable News Summary tab) just means a writer.
 
 from __future__ import annotations
 
@@ -91,6 +93,7 @@ def get_current_user(request: Request) -> dict:
             "can_read": True,
             "can_write": True,
             "is_superuser": True,
+            "is_admin": True,
         }
 
     email = email.strip().lower()
@@ -118,6 +121,7 @@ def get_current_user(request: Request) -> dict:
         "can_read": can_read,
         "can_write": can_write,
         "is_superuser": can_write,
+        "is_admin": can_write,
     }
 
 

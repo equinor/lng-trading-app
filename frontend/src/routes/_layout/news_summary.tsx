@@ -1,10 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 
-import { NewsSummaryPage } from "@/features/news/pages/NewsSummaryPage"
-
+// Legacy URL: the editable summary now lives as an admin-only tab under /news.
 export const Route = createFileRoute("/_layout/news_summary")({
-  component: NewsSummaryPage,
-  head: () => ({
-    meta: [{ title: "News Summary - LNG Trading App" }],
-  }),
+  beforeLoad: () => {
+    throw redirect({ to: "/news/summary", replace: true })
+  },
 })

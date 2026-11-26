@@ -2,7 +2,12 @@ import { apiRequest } from "@/services/api_client"
 
 const BASE = "/api/v1/pipeline-nominations"
 
-export type FacilityFilter = { name: string; pipelines: string[] }
+export type Region = "US" | "Non-US"
+export type FacilityFilter = {
+  name: string
+  region: Region
+  pipelines: string[]
+}
 export type FiltersResponse = {
   latest_date: string | null
   facilities: FacilityFilter[]
@@ -29,12 +34,17 @@ export type MatrixCell = {
 export type PipelineRow = { name: string; cells: MatrixCell[] }
 export type FacilityRow = {
   name: string
+  region: Region
   cells: MatrixCell[]
   pipelines: PipelineRow[]
 }
+export type RegionTotal = { region: Region; cells: MatrixCell[] }
 export type MatrixTable = {
   columns: ColumnMeta[]
+  // US facilities first, then the rest.
   facilities: FacilityRow[]
+  // Only regions with a facility in the table.
+  region_totals: RegionTotal[]
   total: MatrixCell[]
 }
 

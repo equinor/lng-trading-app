@@ -1,10 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 
-import { NewsSummaryCondensedPage } from "@/features/news/pages/NewsSummaryCondensedPage"
-
+// Legacy URL: the condensed summary is now the default News tab.
 export const Route = createFileRoute("/_layout/news_summary_condensed")({
-  component: NewsSummaryCondensedPage,
-  head: () => ({
-    meta: [{ title: "News Summary (Condensed) - LNG Trading App" }],
-  }),
+  beforeLoad: () => {
+    throw redirect({ to: "/news", replace: true })
+  },
 })

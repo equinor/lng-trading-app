@@ -2,10 +2,8 @@ import {
   ChartSpline,
   Flame,
   Home,
-  ListCollapse,
   Newspaper,
   Scale,
-  ScrollText,
   ShieldCheck,
   Waypoints,
 } from "lucide-react"
@@ -28,14 +26,7 @@ import { User } from "./User"
 const baseItems: Item[] = [
   { icon: Home, tone: "neutral", title: "Dashboard", path: "/" },
   { type: "separator", key: "dashboard-news-divider" },
-  { icon: Newspaper, tone: "neutral", title: "Newsletter", path: "/newsletter" },
-  { icon: ScrollText, tone: "neutral", title: "News Summary", path: "/news_summary" },
-  {
-    icon: ListCollapse,
-    tone: "neutral",
-    title: "News Summary (Condensed)",
-    path: "/news_summary_condensed",
-  },
+  { icon: Newspaper, tone: "neutral", title: "News", path: "/news" },
   { type: "separator", key: "news-pipeline-divider" },
   { icon: Waypoints, tone: "emerald", title: "Pipeline Nominations", path: "/pipeline_nominations" },
   { type: "separator", key: "pipeline-lng-balance-divider" },
