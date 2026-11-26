@@ -335,14 +335,14 @@ The collector writes to the Databricks tables in `FLARE_MONITOR_SCHEMA`, so it n
 
 *Labelling and checking the rule:* see below.
 
-**Signing in.** The collector first tries the service account (`WOODMAC_USERNAME`, `WOODMAC_PASSWORD`; the form is filled with common field selectors, so it needs no MFA or captcha). If that fails it uses a saved session (`WOODMAC_STORAGE_STATE`). Create the saved session on your own machine, then store the printed value as the Radix secret:
+**Signing in.** WoodMac signs Equinor staff in through Equinor single sign-on, which only completes silently in a browser on a managed Equinor machine, so a Radix pod cannot use it. The collector tries three routes in this order. **1. A browser profile on the machine it runs on** (`FLARE_BROWSER_PROFILE`, `FLARE_BROWSER_CHANNEL=msedge`, `FLARE_SSO_USERNAME=<your Equinor email>`): when the profile is signed out the collector types the email on WoodMac's sign-on page and Equinor sign-on finishes by itself, with no password or MFA. This works headless and was tested from a fully signed-out profile. Keep that profile folder to the collector (it cannot be open in another Edge window) and keep it out of git. **2. The service account** (`WOODMAC_USERNAME`, `WOODMAC_PASSWORD`; the form is filled with common field selectors, so it needs no MFA or captcha, and an account tied to Equinor sign-on will not pass). **3. A saved session** (`WOODMAC_STORAGE_STATE`). WoodMac's login tokens are single use, so a saved session dies as soon as any other browser renews it; do not rely on it. Create one on your own machine, then store the printed value as the Radix secret:
 
 ```powershell
 cd backend
 uv run --group collector python -m app.features.flare_monitor.collector.save_session
 ```
 
-If neither works the collector logs the reason, marks cameras unknown once their images stop, and retries after `FLARE_SIGNIN_RETRY_MINUTES` (30) so it does not lock the account. Repeat the step above when the saved session expires. A saved session does not last long (one saved the day before was already signed out), so the service account is the reliable route on Radix. While it runs, the collector writes the browser's renewed session to `woodmac_session.json` in `FLARE_CACHE_DIR` and tries that file before the secret, so a local restart keeps working; the file is lost when a Radix pod restarts.
+If neither works the collector logs the reason, marks cameras unknown once their images stop, and retries after `FLARE_SIGNIN_RETRY_MINUTES` (30) so it does not lock the account. The service-account message says what the sign-in page showed, for example `the form did not sign in at identity.woodmac.com/sign-in: 'Unable to sign in'` for a wrong user name or password, or a prompt for a code when the account has MFA, which the collector cannot answer. It ticks "Keep me signed in" on the form. Repeat the step above when the saved session expires. A saved session does not last long (one saved the day before was already signed out), so the service account is the reliable route on Radix. While it runs, the collector writes the browser's renewed session to `woodmac_session.json` in `FLARE_CACHE_DIR` and tries that file before the secret, so a local restart keeps working; the file is lost when a Radix pod restarts.
 
 **Cameras and flare regions.** Set `FLARE_CAMERAS` to JSON of the cameras to track: the image camera ID (the number in the file names), its WoodMac name as `plant`, and optionally the flare region as fractions of the image (left, top, right, bottom). Without it every camera on the map is tracked, over the whole image. The region matters: stacks and towers glow all the time, so exclude them. These 14 are the cameras being tracked (the `.env` and `radixconfig.yaml` value); only 1577 has a region so far, so draw the others in the labelling tool.
 
@@ -723,7 +723,9 @@ lng-trading-app/
 | `LNG_BALANCE_DEMAND_HISTORY_TABLE` | `ms_vulcan_gplng_plab.fundamentals_silver.lng_balance_model_daily_demand` | Same demand table with a snapshot per `forecast_date`, for comparing forecasts |
 | `FLARE_MONITOR_SCHEMA` | `ms_vulcan_gplng_plab.trader_news_app` | Schema holding the flare monitor tables |
 | `WOODMAC_USERNAME` / `WOODMAC_PASSWORD` | none | Service account the flare collector signs in with (Radix secrets, collector only) |
-| `WOODMAC_STORAGE_STATE` | none | Saved WoodMac session used when the service account cannot sign in (Radix secret, collector only) |
+| `WOODMAC_STORAGE_STATE` | none | Saved WoodMac session used when the other sign-in routes fail (Radix secret, collector only) |
+| `FLARE_BROWSER_PROFILE` / `FLARE_BROWSER_CHANNEL` | none | Browser profile folder and browser (`msedge`) the collector signs in with on an Equinor machine (collector only) |
+| `FLARE_SSO_USERNAME` | none | Email typed on WoodMac's sign-on page when the profile is signed out (collector only) |
 | `FLARE_CAMERAS` | none (all cameras) | JSON of cameras to track, with plant and flare region (collector only) |
 | `FLARE_IMAGE_TIMEZONE` | `America/New_York` | Time zone of the timestamps in image names (collector only) |
 | `FLARE_POLL_SECONDS` / `FLARE_CACHE_HOURS` | `300` / `6` | How often the map is read, and how long cached images are kept (collector only) |

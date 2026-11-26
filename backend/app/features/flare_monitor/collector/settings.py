@@ -50,6 +50,14 @@ class CollectorSettings(BaseSettings):
     FLARE_FLARE_REQUIRED: int = 2
     FLARE_CLEAR_REQUIRED: int = 3
     FLARE_UNUSABLE_REQUIRED: int = 3
+    # Sign in through a browser profile on this machine (for example an Edge profile on an Equinor
+    # laptop, where Equinor single sign-on logs in without a prompt). Tried before the others.
+    FLARE_BROWSER_PROFILE: str | None = None
+    # Browser to use with the profile, such as "msedge". Empty means Playwright's own Chromium.
+    FLARE_BROWSER_CHANNEL: str | None = None
+    # The email typed on WoodMac's sign-on page when the profile is signed out. Equinor sign-on
+    # then completes by itself on a managed laptop.
+    FLARE_SSO_USERNAME: str | None = None
     # Show the browser (local debugging only).
     FLARE_HEADED: bool = False
     # Start Chromium without its own sandbox. Needed in a container that does not allow user

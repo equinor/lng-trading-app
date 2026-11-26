@@ -32,7 +32,7 @@ export function tileText(label: FlareLabel, usable: boolean): string {
 
 export function stateText(camera: CameraStatus): string {
   if (camera.stale) {
-    return "No recent image, so the state is unknown"
+    return "No recent image, so the state is unknown. The collector may be stopped or signed out of WoodMac."
   }
   if (camera.state === "unknown") {
     return "Obstructed, no recent image or not yet confirmed"

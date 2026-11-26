@@ -71,6 +71,14 @@ class FlareProcessor:
             self._newest[camera_id] = max(
                 self._newest.get(camera_id, taken_at), taken_at
             )
+        # Keep the last image time a camera had before a restart, so a restart that finds no new
+        # images does not wipe it.
+        for camera_id, saved in self._persisted.items():
+            last = saved.get("last_image_at")
+            if last is not None:
+                if last.tzinfo is None:
+                    last = last.replace(tzinfo=dt.timezone.utc)
+                self._newest[camera_id] = max(self._newest.get(camera_id, last), last)
         # With no camera list every camera that has a stored state is followed, so one that stops
         # publishing is still marked unknown.
         for camera_id in self._cameras or self._persisted:
@@ -253,6 +261,7 @@ class FlareProcessor:
     def _save_state(self, tracker: CameraTracker) -> None:
         camera_id = tracker.camera_id
         latest = self._latest.get(camera_id)
+        saved = self._persisted.get(camera_id, {})
         self._repository.save_state(
             {
                 "camera_id": camera_id,
@@ -260,9 +269,9 @@ class FlareProcessor:
                 "state": tracker.state.value,
                 "since": tracker.since,
                 "last_image_at": self._newest.get(camera_id),
-                "last_label": latest.label.value if latest else None,
-                "last_usable": latest.usable if latest else None,
-                "last_score": latest.score if latest else None,
+                "last_label": latest.label.value if latest else saved.get("last_label"),
+                "last_usable": latest.usable if latest else saved.get("last_usable"),
+                "last_score": latest.score if latest else saved.get("last_score"),
                 "updated_at": self._clock(),
             }
         )

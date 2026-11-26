@@ -23,6 +23,11 @@ from app.features.flare_monitor.repository import FlareMonitorRepository
 
 logger = logging.getLogger(__name__)
 
+# A step that takes longer than this is abandoned and retried, so a stuck page cannot stall the
+# collector for good.
+_SIGN_IN_TIMEOUT = 180
+_STEP_TIMEOUT = 240
+
 
 class MapReader:
     """Collects the camera images the WoodMac map requests while it loads."""
@@ -101,6 +106,11 @@ async def run() -> None:
         len(settings.cameras()) or "all",
         settings.FLARE_IMAGE_TIMEZONE,
     )
+    logger.info(
+        "Sign-in options: service account %s, saved session secret %s",
+        "set" if settings.WOODMAC_USERNAME and settings.WOODMAC_PASSWORD else "NOT set",
+        "set" if settings.WOODMAC_STORAGE_STATE else "NOT set",
+    )
 
     async with async_playwright() as playwright:
         session: Session | None = None
@@ -109,13 +119,17 @@ async def run() -> None:
             delay = settings.FLARE_POLL_SECONDS
             try:
                 if session is None:
-                    session = await sign_in(playwright, settings)
+                    session = await asyncio.wait_for(
+                        sign_in(playwright, settings), _SIGN_IN_TIMEOUT
+                    )
                     reader = MapReader(session, settings)
                     names = [c.plant for c in settings.cameras().values() if c.plant]
                     await limit_history(session.context, settings.FLARE_HOURS_BACK)
-                    await ensure_cameras(session.page, names)
+                    await asyncio.wait_for(
+                        ensure_cameras(session.page, names), _STEP_TIMEOUT
+                    )
                 assert reader is not None
-                images = await reader.read()
+                images = await asyncio.wait_for(reader.read(), _STEP_TIMEOUT)
                 await remember_session(session, settings)
                 new = await asyncio.to_thread(processor.process_batch, images)
                 logger.info("Map load: %s image(s), %s new", len(images), new)

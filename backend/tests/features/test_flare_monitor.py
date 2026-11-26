@@ -267,6 +267,34 @@ def test_missing_camera_survives_a_database_error_and_is_retried(
     assert [event["state"] for event in repository.events] == ["on", "unknown"]
 
 
+def test_restart_keeps_the_last_image_time_when_no_new_images_arrive(
+    tmp_path: Path,
+) -> None:
+    repository = FakeRepository()
+    repository.persisted = {
+        "1577": {
+            "camera_id": "1577",
+            "state": "on",
+            "since": T0,
+            "last_image_at": T0,
+            "last_label": "flare",
+            "last_usable": True,
+            "last_score": 1.0,
+        }
+    }
+    clock = Clock()
+    processor = _processor(tmp_path, repository, '{"1577": {}}', clock)
+    processor.start()
+
+    clock.now += dt.timedelta(minutes=31)
+    processor.check_missing()
+
+    state = repository.states["1577"]
+    assert state["state"] == "unknown"
+    assert state["last_image_at"] == T0
+    assert state["last_label"] == "flare"
+
+
 def test_cameras_found_in_the_database_are_followed_without_a_camera_list(
     tmp_path: Path,
 ) -> None:

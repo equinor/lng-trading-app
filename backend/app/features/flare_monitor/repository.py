@@ -92,7 +92,12 @@ class FlareMonitorRepository:
             )
 
     def load_states(self) -> dict[str, dict[str, Any]]:
-        rows = fetch_all(f"SELECT camera_id, state, since FROM {self.state}")
+        rows = fetch_all(
+            f"""
+            SELECT camera_id, state, since, last_image_at, last_label, last_usable, last_score
+            FROM {self.state}
+            """
+        )
         return {row["camera_id"]: row for row in rows}
 
     def save_state(self, row: dict[str, Any]) -> None:
