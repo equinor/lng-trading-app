@@ -19,6 +19,9 @@ import { Route as LayoutNewsRouteImport } from './routes/_layout/news'
 import { Route as LayoutMid_term_curvesRouteImport } from './routes/_layout/mid_term_curves'
 import { Route as LayoutLng_balanceRouteImport } from './routes/_layout/lng_balance'
 import { Route as LayoutFlare_monitorRouteImport } from './routes/_layout/flare_monitor'
+import { Route as LayoutNewsIndexRouteImport } from './routes/_layout/news/index'
+import { Route as LayoutNewsSummaryRouteImport } from './routes/_layout/news/summary'
+import { Route as LayoutNewsNewsletterRouteImport } from './routes/_layout/news/newsletter'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -70,6 +73,21 @@ const LayoutFlare_monitorRoute = LayoutFlare_monitorRouteImport.update({
   id: '/flare_monitor',
   path: '/flare_monitor',
   getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutNewsIndexRoute = LayoutNewsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LayoutNewsRoute,
+} as any)
+const LayoutNewsSummaryRoute = LayoutNewsSummaryRouteImport.update({
+  id: '/summary',
+  path: '/summary',
+  getParentRoute: () => LayoutNewsRoute,
+} as any)
+const LayoutNewsNewsletterRoute = LayoutNewsNewsletterRouteImport.update({
+  id: '/newsletter',
+  path: '/newsletter',
+  getParentRoute: () => LayoutNewsRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -235,6 +253,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/flare_monitor'
       preLoaderRoute: typeof LayoutFlare_monitorRouteImport
       parentRoute: typeof LayoutRoute
+    }
+    '/_layout/news/': {
+      id: '/_layout/news/'
+      path: '/'
+      fullPath: '/news/'
+      preLoaderRoute: typeof LayoutNewsIndexRouteImport
+      parentRoute: typeof LayoutNewsRoute
+    }
+    '/_layout/news/summary': {
+      id: '/_layout/news/summary'
+      path: '/summary'
+      fullPath: '/news/summary'
+      preLoaderRoute: typeof LayoutNewsSummaryRouteImport
+      parentRoute: typeof LayoutNewsRoute
+    }
+    '/_layout/news/newsletter': {
+      id: '/_layout/news/newsletter'
+      path: '/newsletter'
+      fullPath: '/news/newsletter'
+      preLoaderRoute: typeof LayoutNewsNewsletterRouteImport
+      parentRoute: typeof LayoutNewsRoute
     }
   }
 }
