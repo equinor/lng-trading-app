@@ -10,6 +10,7 @@ import numpy as np
 from app.features.flare_monitor.collector.classifier import (
     CameraConfig,
     ThermalBlobClassifier,
+    crop_region,
     decode_grey,
 )
 from app.features.flare_monitor.collector.state import Label
@@ -65,12 +66,15 @@ def _score(samples: list[_Sample], config: CameraConfig) -> dict[str, int]:
     return counts
 
 
-def _suggest(samples: list[_Sample], config: CameraConfig) -> tuple[CameraConfig, int]:
-    """The thresholds that agree with the labels most often (ties: fewest uncertain, nearest default)."""
+def _suggest_blob(
+    samples: list[_Sample], config: CameraConfig
+) -> tuple[CameraConfig, int]:
+    """The blob thresholds that agree with the labels most often (ties: fewest uncertain)."""
     best: tuple[tuple[int, int, float], CameraConfig, int] | None = None
     for hot_delta, min_pixels in itertools.product(HOT_DELTAS, MIN_PIXELS):
         candidate = dataclasses.replace(
             config,
+            mode="blob",
             hot_delta=float(hot_delta),
             min_pixels=min_pixels,
             max_clear_pixels=max(min_pixels // 10, 1),
@@ -85,6 +89,75 @@ def _suggest(samples: list[_Sample], config: CameraConfig) -> tuple[CameraConfig
             best = (rank, candidate, counts["correct"])
     assert best is not None
     return best[1], best[2]
+
+
+def _suggest_glow(
+    samples: list[_Sample], config: CameraConfig
+) -> tuple[CameraConfig, int] | None:
+    """The cool and hot brightness levels that agree with the labels most often.
+
+    Returns None when the images labelled flare are not brighter than the ones labelled no flare
+    (a glowing stack should be).
+    """
+    levels: dict[str, list[float]] = {"flare": [], "no_flare": []}
+    for sample in samples:
+        if sample.grey is not None and sample.truth in levels:
+            levels[sample.truth].append(
+                float(crop_region(sample.grey, config.roi).mean())
+            )
+    if not levels["flare"] or not levels["no_flare"]:
+        return None
+    hot_typical = float(np.median(levels["flare"]))
+    cool_typical = float(np.median(levels["no_flare"]))
+    if hot_typical <= cool_typical:
+        return None
+
+    # The uncertain band is a tenth of the gap, so a stack that is warming or cooling is not
+    # called either way.
+    band = max(2.0, 0.1 * (hot_typical - cool_typical))
+    ordered = sorted({*levels["flare"], *levels["no_flare"]})
+    cuts = [(a + b) / 2 for a, b in itertools.pairwise(ordered)] or [ordered[0]]
+    best: tuple[tuple[int, int], CameraConfig, int] | None = None
+    for cut in cuts:
+        candidate = dataclasses.replace(
+            config,
+            mode="glow",
+            glow_clear=round(cut, 1),
+            glow_flare=round(cut + band, 1),
+        )
+        counts = _score(samples, candidate)
+        rank = (-counts["correct"], counts["uncertain"])
+        if best is None or rank < best[0]:
+            best = (rank, candidate, counts["correct"])
+    assert best is not None
+    return best[1], best[2]
+
+
+def _suggest(samples: list[_Sample], config: CameraConfig) -> tuple[CameraConfig, int]:
+    """The best way to read this camera, blob or glow, and its thresholds.
+
+    Blob is kept unless glow agrees with the labels clearly more often.
+    """
+    blob, blob_correct = _suggest_blob(samples, config)
+    glow = _suggest_glow(samples, config)
+    if glow is not None and glow[1] > blob_correct + max(1, len(samples) // 50):
+        return glow
+    return blob, blob_correct
+
+
+def _tuning(config: CameraConfig) -> dict[str, Any]:
+    """The FLARE_CAMERAS values that tune how a camera is read."""
+    if config.mode == "glow":
+        return {
+            "mode": "glow",
+            "glow_clear": config.glow_clear,
+            "glow_flare": config.glow_flare,
+        }
+    return {
+        "hot_delta": config.hot_delta,
+        "min_pixels": config.min_pixels,
+        "max_clear_pixels": config.max_clear_pixels,
+    }
 
 
 def evaluate(
@@ -116,22 +189,18 @@ def evaluate(
             "unusable": truths.count("unusable"),
             "accuracy": round(counts["correct"] / len(samples), 3),
             **counts,
+            "mode": config.mode,
             "enough_labels": len(samples) >= ENOUGH_LABELS,
             "suggestion": None,
         }
         if report["flare"] and report["no_flare"]:
             best, correct = _suggest(samples, config)
             report["suggestion"] = {
-                "hot_delta": best.hot_delta,
-                "min_pixels": best.min_pixels,
-                "max_clear_pixels": best.max_clear_pixels,
+                **_tuning(best),
+                "mode": best.mode,
                 "accuracy": round(correct / len(samples), 3),
             }
-            tuned[camera_id] = {
-                "hot_delta": best.hot_delta,
-                "min_pixels": best.min_pixels,
-                "max_clear_pixels": best.max_clear_pixels,
-            }
+            tuned[camera_id] = _tuning(best)
         else:
             report["note"] = "Label both flare and no-flare images to get a suggestion."
         cameras.append(report)
@@ -153,6 +222,16 @@ def camera_config(
     return config
 
 
+_TUNING_KEYS = (
+    "mode",
+    "hot_delta",
+    "min_pixels",
+    "max_clear_pixels",
+    "glow_clear",
+    "glow_flare",
+)
+
+
 def _entry(config: CameraConfig) -> dict[str, Any]:
     """The FLARE_CAMERAS entry for a camera, leaving out values that are the defaults."""
     default = CameraConfig()
@@ -161,7 +240,7 @@ def _entry(config: CameraConfig) -> dict[str, Any]:
         entry["plant"] = config.plant
     if config.roi != default.roi:
         entry["roi"] = list(config.roi)
-    for name in ("hot_delta", "min_pixels", "max_clear_pixels"):
+    for name in _TUNING_KEYS:
         if getattr(config, name) != getattr(default, name):
             entry[name] = getattr(config, name)
     return entry
@@ -177,5 +256,9 @@ def merge_cameras(
         if entry.get("roi"):
             merged.setdefault(camera_id, {})["roi"] = list(entry["roi"])
     for camera_id, values in tuned.items():
-        merged.setdefault(camera_id, {}).update(values)
+        entry = merged.setdefault(camera_id, {})
+        # New tuning replaces the old, so switching between blob and glow leaves no stale values.
+        for key in _TUNING_KEYS:
+            entry.pop(key, None)
+        entry.update(values)
     return merged

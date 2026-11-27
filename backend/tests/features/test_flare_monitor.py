@@ -2,6 +2,7 @@ import datetime as dt
 import io
 import os
 import time
+import zlib
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -527,7 +528,7 @@ class FakeWoodMac:
         path = request.url.path
         self.calls.append((path, request.url.params.get("minTimestamp", "")))
         if request.url.host == "blob.test":
-            return httpx.Response(200, content=_scene(True, abs(hash(path)) % 1000))
+            return httpx.Response(200, content=_scene(True, zlib.crc32(path.encode())))
         if request.headers.get("authorization") != "Bearer good-token":
             return httpx.Response(401, json={"message": "Unauthorized"})
         if self.status != 200:
@@ -679,3 +680,110 @@ def test_token_expiry_is_read_from_the_token() -> None:
 
     assert token_expiry(_jwt(expires)) == expires
     assert token_expiry("not a token") is None
+
+
+# --- glow mode (a stack that goes white when hot) ---
+
+STACK = (0.4, 0.2, 0.6, 0.35)  # the stack region, as fractions of the image
+
+
+def _stack_scene(
+    level: float | None, seed: int = 0, background: float = 150.0
+) -> bytes:
+    """A bright scene with a stack whose region has the given average brightness."""
+    pixels = np.random.default_rng(seed).normal(background, 8, (512, 640)).clip(0, 255)
+    if level is not None:
+        left, top, right, bottom = STACK
+        pixels[
+            int(top * 512) : int(bottom * 512), int(left * 640) : int(right * 640)
+        ] = (
+            np.random.default_rng(seed + 1).normal(
+                level,
+                3,
+                (
+                    int(bottom * 512) - int(top * 512),
+                    int(right * 640) - int(left * 640),
+                ),
+            )
+        ).clip(0, 255)
+    return _jpeg(pixels)
+
+
+GLOW = CameraConfig(roi=STACK, mode="glow", glow_clear=76.0, glow_flare=82.0)
+
+
+def test_glow_mode_reads_a_stack_that_the_blob_rule_cannot() -> None:
+    classifier = ThermalBlobClassifier()
+    hot, cool = _stack_scene(125.0), _stack_scene(73.0)
+
+    # On this bright scene a white stack is never 90 levels above the image median.
+    assert classifier.classify(hot, CameraConfig(roi=STACK)).label is not Label.FLARE
+    assert classifier.classify(hot, GLOW).label is Label.FLARE
+    assert classifier.classify(cool, GLOW).label is Label.NO_FLARE
+
+
+def test_glow_mode_leaves_the_warming_band_uncertain() -> None:
+    classifier = ThermalBlobClassifier()
+
+    result = classifier.classify(_stack_scene(79.0), GLOW)
+
+    assert result.label is Label.UNCERTAIN and result.usable
+    assert 0.0 < result.score < 1.0
+    assert result.peak_delta == pytest.approx(79.0, abs=1.5)  # the region's brightness
+
+
+def test_glow_mode_makes_no_call_until_it_is_calibrated() -> None:
+    uncalibrated = CameraConfig(roi=STACK, mode="glow")
+
+    result = ThermalBlobClassifier().classify(_stack_scene(125.0), uncalibrated)
+
+    assert result.label is Label.UNCERTAIN and result.usable
+
+
+def test_glow_mode_counts_a_fully_white_stack_as_hot_but_a_blank_image_as_unusable() -> (
+    None
+):
+    classifier = ThermalBlobClassifier()
+    pixels = np.random.default_rng(0).normal(150, 8, (512, 640)).clip(0, 255)
+    left, top, right, bottom = STACK
+    pixels[int(top * 512) : int(bottom * 512), int(left * 640) : int(right * 640)] = 255
+
+    assert classifier.classify(_jpeg(pixels), GLOW).label is Label.FLARE
+    assert not classifier.classify(_jpeg(np.full((512, 640), 128.0)), GLOW).usable
+
+
+def test_camera_settings_parse_glow_and_reject_inverted_levels() -> None:
+    cameras = parse_cameras(
+        '{"1093": {"plant": "Cove Point Train", "mode": "glow", "glow_clear": 75.6, "glow_flare": 80.2}}'
+    )
+
+    assert cameras["1093"].mode == "glow"
+    assert (cameras["1093"].glow_clear, cameras["1093"].glow_flare) == (75.6, 80.2)
+    with pytest.raises(ValueError):
+        parse_cameras('{"1": {"mode": "glow", "glow_clear": 80, "glow_flare": 70}}')
+
+
+def test_report_picks_glow_for_a_stack_and_replaces_old_tuning(tmp_path: Path) -> None:
+    for index in range(16):
+        flaring = index % 2 == 0
+        level = 125.0 + index if flaring else 73.0 + (index % 3)
+        (tmp_path / f"1093_20261123_12{index:02d}00.jpg").write_bytes(
+            _stack_scene(level, index)
+        )
+    store = LabelStore(tmp_path / "labels.json")
+    for index in range(16):
+        store.set_label(
+            f"1093/1093_20261123_12{index:02d}00.jpg",
+            "flare" if index % 2 == 0 else "no_flare",
+        )
+    store.set_roi("1093", list(STACK))
+    base = parse_cameras('{"1093": {"plant": "Cove Point Train", "hot_delta": 60}}')
+
+    report = evaluate(scan_images(tmp_path, ZoneInfo("UTC")), store, base)
+
+    suggestion = report["cameras"][0]["suggestion"]
+    assert suggestion["mode"] == "glow" and suggestion["accuracy"] == 1.0
+    entry = report["suggested_flare_cameras"]["1093"]
+    assert entry["mode"] == "glow" and entry["glow_flare"] > entry["glow_clear"]
+    assert entry["plant"] == "Cove Point Train"
+    assert "hot_delta" not in entry  # the old blob tuning is dropped, not left behind

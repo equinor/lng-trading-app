@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -63,4 +64,12 @@ class LabelStore:
             json.dumps({"labels": self.labels, "cameras": self.cameras}, indent=1),
             encoding="utf-8",
         )
-        temporary.replace(self.path)
+        # On Windows a virus scanner or indexer can briefly hold the new file open.
+        for attempt in range(10):
+            try:
+                temporary.replace(self.path)
+                return
+            except PermissionError:
+                if attempt == 9:
+                    raise
+                time.sleep(0.05 * (attempt + 1))

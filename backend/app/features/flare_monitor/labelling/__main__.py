@@ -67,12 +67,18 @@ def main() -> None:
             print("  Too few labels for this to mean much (aim for 30 or more).")  # noqa: T201
         suggestion = camera["suggestion"]
         if suggestion:
-            print(  # noqa: T201
-                f"  Best thresholds: hot_delta={suggestion['hot_delta']:.0f}, "
-                f"min_pixels={suggestion['min_pixels']}, "
-                f"max_clear_pixels={suggestion['max_clear_pixels']} "
-                f"-> {suggestion['accuracy']:.0%}"
-            )
+            if suggestion["mode"] == "glow":
+                detail = (
+                    f"glow mode: cool at or below {suggestion['glow_clear']}, "
+                    f"hot at or above {suggestion['glow_flare']} (region brightness)"
+                )
+            else:
+                detail = (
+                    f"blob mode: hot_delta={suggestion['hot_delta']:.0f}, "
+                    f"min_pixels={suggestion['min_pixels']}, "
+                    f"max_clear_pixels={suggestion['max_clear_pixels']}"
+                )
+            print(f"  Best: {detail} -> {suggestion['accuracy']:.0%}")  # noqa: T201
         elif camera.get("note"):
             print(f"  {camera['note']}")  # noqa: T201
     print("\nFLARE_CAMERAS suggestion:")  # noqa: T201

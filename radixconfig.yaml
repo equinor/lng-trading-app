@@ -79,7 +79,7 @@ spec:
         FLARE_IMAGE_TIMEZONE: America/New_York
         FLARE_CACHE_HOURS: "6"
         # Cameras to track: image camera ID, WoodMac camera name and flare region. Empty tracks every camera.
-        FLARE_CAMERAS: '{"1209": {"plant": "Cameron Train 3"}, "1186": {"plant": "Cameron Trains 1 & 2"}, "1222": {"plant": "Corpus Christi Trains 1, 2, & 3"}, "1575": {"plant": "Corpus Christi Trains 4, 5, 6, 7"}, "1576": {"plant": "Corpus Christi Trains 7, 8, 9, & 10"}, "1093": {"plant": "Cove Point Train"}, "1597": {"plant": "Golden Pass Train 1"}, "1571": {"plant": "LNG Canada Train 1"}, "1577": {"plant": "LNG Canada Flare", "roi": [0, 0, 0.4, 0.55]}, "1559": {"plant": "Plaquemines Power 1"}, "1611": {"plant": "Plaquemines Power 2"}, "1211": {"plant": "Sabine Pass Trains 5 & 6"}, "858": {"plant": "Sabine Trains 1 & 2"}, "703": {"plant": "Sabine Trains 3 & 4"}}'
+        FLARE_CAMERAS: '{"1209": {"plant": "Cameron Train 3"}, "1186": {"plant": "Cameron Trains 1 & 2"}, "1222": {"plant": "Corpus Christi Trains 1, 2, & 3"}, "1575": {"plant": "Corpus Christi Trains 4, 5, 6, 7"}, "1576": {"plant": "Corpus Christi Trains 7, 8, 9, & 10"}, "1093": {"plant": "Cove Point Train", "roi": [0.4764, 0.219, 0.5919, 0.3404], "mode": "glow", "glow_clear": 75.6, "glow_flare": 80.2}, "1597": {"plant": "Golden Pass Train 1"}, "1571": {"plant": "LNG Canada Train 1"}, "1577": {"plant": "LNG Canada Flare", "roi": [0, 0, 0.4, 0.55]}, "1559": {"plant": "Plaquemines Power 1"}, "1611": {"plant": "Plaquemines Power 2"}, "1211": {"plant": "Sabine Pass Trains 5 & 6"}, "858": {"plant": "Sabine Trains 1 & 2"}, "703": {"plant": "Sabine Trains 3 & 4"}}'
       resources:
         requests:
           cpu: "250m"

@@ -68,6 +68,7 @@ class LabellingApp:
         result = self.classifier.classify(image.path.read_bytes(), config)
         return {
             "label": result.label.value if result.usable else "unusable",
+            "mode": config.mode,
             "hot_pixels": result.hot_pixels,
             "peak_delta": result.peak_delta,
         }

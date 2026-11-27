@@ -122,7 +122,9 @@ async function show() {
   if ($("guess").checked) {
     const g = await (await fetch(`/api/guess?key=${encodeURIComponent(item.key)}`)).json();
     $("guessOut").textContent =
-      `Rule's guess: ${g.label} (${g.hot_pixels} hot pixels, peak +${g.peak_delta})`;
+      g.mode === "glow"
+        ? `Rule's guess: ${g.label} (glow mode, region brightness ${g.peak_delta})`
+        : `Rule's guess: ${g.label} (${g.hot_pixels} hot pixels, peak +${g.peak_delta})`;
   }
 }
 
@@ -232,7 +234,11 @@ $("report").onclick = async () => {
       const s = table.insertRow().insertCell();
       s.colSpan = 5;
       s.className = "muted";
-      s.textContent = `Best thresholds: hot_delta ${c.suggestion.hot_delta}, min_pixels ${c.suggestion.min_pixels} (${Math.round(c.suggestion.accuracy * 100)}%)` +
+      const q = c.suggestion;
+      const how = q.mode === "glow"
+        ? `glow mode, cool <= ${q.glow_clear}, hot >= ${q.glow_flare}`
+        : `blob mode, hot_delta ${q.hot_delta}, min_pixels ${q.min_pixels}`;
+      s.textContent = `Best: ${how} (${Math.round(q.accuracy * 100)}%)` +
         (c.enough_labels ? "" : " - too few labels to trust");
     } else if (c.note) {
       const s = table.insertRow().insertCell();

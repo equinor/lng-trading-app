@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.features.flare_monitor.collector.classifier import CameraConfig
@@ -110,6 +110,19 @@ class _CameraEntry(BaseModel):
     hot_delta: float = 90.0
     min_pixels: int = 100
     max_clear_pixels: int = 10
+    mode: Literal["blob", "glow"] = "blob"
+    glow_clear: float | None = None
+    glow_flare: float | None = None
+
+    @model_validator(mode="after")
+    def _check_glow(self) -> _CameraEntry:
+        if (
+            self.glow_clear is not None
+            and self.glow_flare is not None
+            and self.glow_flare <= self.glow_clear
+        ):
+            raise ValueError("glow_flare must be above glow_clear")
+        return self
 
 
 def parse_cameras(raw: str | None) -> dict[str, CameraConfig]:
